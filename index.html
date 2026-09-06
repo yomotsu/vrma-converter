@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07111c" />
+    <meta name="description" content="Mixamo and humanoid motion to VRMA converter" />
+    <title>Motion Forge — VRMA Converter</title>
+  </head>
+  <body>
+    <div id="app">
+      <main class="workspace">
+        <aside class="sidebar left-sidebar">
+          <div class="panel-heading">
+            <div class="panel-heading-copy">
+              <h1>VRMA Converter</h1>
+              <p>Mixamo などの人型リグアニメーションを<br />VRMA に変換します</p>
+            </div>
+          </div>
+
+          <section class="sidebar-section">
+            <div class="section-label joined-label"><span>01</span><span>VRMモデル</span></div>
+            <button class="drop-card model-drop" id="model-drop" type="button">
+              <span class="dropzone-plus">+</span>
+              <span class="drop-card-copy">
+                <strong id="model-name">VRM 未読み込み</strong>
+                <small id="model-status">VRM をドロップして読み込み</small>
+              </span>
+              <span class="format-row model-format-row"><i>VRM</i></span>
+              <span class="dropzone-arrow" aria-hidden="true">↗</span>
+            </button>
+            <input id="vrm-file-input" class="visually-hidden" type="file" accept=".vrm,model/gltf-binary,model/gltf+json" />
+          </section>
+
+          <section class="sidebar-section animation-section">
+            <div class="section-label joined-label"><span>02</span><span>モーションソース</span></div>
+            <button class="motion-dropzone" id="animation-drop" type="button">
+              <span class="dropzone-plus">+</span>
+              <strong>アニメーションをドロップ</strong>
+              <small>Mixamo の FBX<br />Universal humanoid rig 対応 FBX<br />BVH / VRMA など</small>
+              <span class="format-row"><i>GLB</i><i>FBX</i><i>BVH</i><i>VRMA</i></span>
+              <span class="dropzone-arrow" aria-hidden="true">↗</span>
+            </button>
+            <input id="animation-file-input" class="visually-hidden" type="file" accept=".vrma,.glb,.gltf,.fbx,.bvh,model/gltf-binary,model/gltf+json" />
+          </section>
+
+          <section class="sidebar-section queue-section">
+            <div class="section-label"><span>モーションクリップ</span><span id="queue-count">1 ITEM</span></div>
+            <div class="asset-list" id="asset-list" aria-live="polite"></div>
+          </section>
+
+        </aside>
+
+        <section class="stage-column">
+          <div class="viewport-shell" id="viewport-shell">
+            <canvas id="viewport" aria-label="VRM avatar preview"></canvas>
+            <div class="stage-tools">
+              <button class="tool-button zoom-trigger viewport-background-trigger" id="viewport-background-button" type="button" title="白っぽい背景に切り替え" aria-label="白っぽい背景に切り替え" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M4 4h8v8H4zM12 12h8v8h-8z" fill="currentColor" stroke="none"></path></svg>
+              </button>
+              <button class="tool-button" id="reset-view-button" type="button" title="ビューをリセット" aria-label="ビューをリセット">↺</button>
+              <button class="tool-button zoom-trigger" id="viewport-zoom-out-button" type="button" title="ズームアウト" aria-label="ズームアウト">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.8"></circle><path d="m15 15 5 5"></path><path d="M7.5 10.5h6"></path></svg>
+              </button>
+              <button class="tool-button zoom-trigger" id="viewport-zoom-button" type="button" title="ズームイン" aria-label="ズームイン">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.8"></circle><path d="m15 15 5 5"></path><path d="M10.5 7.5v6M7.5 10.5h6"></path></svg>
+              </button>
+              <label class="viewport-zoom-control" title="ビューアーのズーム">
+                <span class="viewport-zoom-label">ZOOM</span>
+                <input id="viewport-zoom-range" type="range" min="0" max="100" value="65" step="1" aria-label="ビューアーのズーム" />
+              </label>
+            </div>
+            <div class="viewport-empty-hint" id="viewport-empty-hint" hidden></div>
+            <div class="loading-overlay" id="loading-overlay" hidden>
+              <span class="loading-spinner"></span>
+              <span id="loading-label">LOADING ASSET</span>
+            </div>
+          </div>
+        </section>
+
+        <aside class="sidebar right-sidebar">
+          <section class="inspector-section first-inspector">
+            <div class="section-label dark-label"><span>モーションデータ</span></div>
+            <div class="data-grid">
+              <div><span>DURATION</span><strong id="data-duration">00:02.40</strong></div>
+              <div><span>KEYFRAMES</span><strong id="data-keyframes">48</strong></div>
+              <div><span>FORMAT</span><strong id="data-format">VRMA</strong></div>
+              <div class="data-grid-bones"><span>BONES MAPPED</span><strong id="readout-bones">68 / 68 BONES MAPPED</strong></div>
+            </div>
+          </section>
+
+          <section class="inspector-section speed-section">
+            <div class="operation-row operation-heading-row" id="speed-operation-row">
+              <span class="operation-copy"><strong>速度倍率をVRMAに適用</strong></span>
+            </div>
+            <div class="speed-setting-row">
+              <label class="frame-setting speed-range-setting"><span class="speed-range-heading"><span>SPEED MULTIPLIER</span><strong id="speed-multiplier-value">1×</strong></span><input class="speed-multiplier-range" id="speed-multiplier" type="range" min="0.1" max="3" value="1" step="0.1" aria-label="速度倍率" /></label>
+            </div>
+          </section>
+
+          <section class="inspector-section tuning-section">
+            <div class="operation-row operation-heading-row" id="bake-operation-row">
+              <span class="operation-copy"><strong>固定フレーム間隔で<br />全transformをベイク</strong></span>
+            </div>
+            <div class="bake-frame-settings">
+              <label class="frame-setting"><span>BAKE FPS</span><input class="bake-fps-input" id="bake-fps" type="number" min="1" max="240" value="30" step="1" inputmode="numeric" aria-label="ベイクするFPS" /></label>
+              <label class="frame-setting"><span>DIVISIONS / SEC</span><span class="frame-step-readout"><input class="frame-step-number" id="bake-frame-step-number" type="number" min="1" max="30" value="1" step="1" aria-label="1秒あたりの分割数" /><strong>DIVISIONS</strong></span></label>
+            </div>
+            <div class="slider-row bake-frame-step-control">
+              <span class="slider-heading">DIVISION</span>
+              <input id="bake-frame-step" type="range" min="1" max="30" value="1" step="1" aria-label="1秒あたりの分割数" />
+              <div class="slider-scale frame-step-scale"><span>1</span><span id="bake-frame-mid-label">15</span><span id="bake-frame-max-label">30</span></div>
+            </div>
+            <div class="operation-actions bake-actions"><button class="apply-button" id="bake-apply-button" type="button" disabled>APPLY</button><button class="cancel-button" id="bake-cancel-button" type="button" disabled>CANCEL</button><button class="revert-button" id="bake-revert-button" type="button" disabled>REVERT</button></div>
+          </section>
+
+          <section class="inspector-section export-section">
+            <button class="download-button full" id="download-button" type="button" disabled>
+              <span class="button-icon" aria-hidden="true">↓</span>
+              <span class="download-copy">
+                <span class="download-label">VRMA をダウンロード</span>
+                <span class="download-details"><span class="download-name" id="download-name">animation.vrma</span><span class="download-detail-separator">·</span><span class="download-size" id="download-size">—</span></span>
+              </span>
+            </button>
+          </section>
+
+        </aside>
+      </main>
+
+      <section class="timeline-panel">
+        <div class="timeline-header">
+          <div class="section-label timeline-heading"><span>タイムライン</span></div>
+          <div class="transport-bar">
+            <div class="transport-left">
+              <button class="transport-button" id="previous-frame-button" type="button" title="先頭へ" aria-label="先頭へ"><span class="transport-icon transport-icon-previous" aria-hidden="true"></span></button>
+              <button class="play-button" id="play-button" type="button" aria-label="一時停止"><span id="play-icon">Ⅱ</span></button>
+              <button class="transport-button" id="next-frame-button" type="button" title="末尾へ" aria-label="末尾へ"><span class="transport-icon transport-icon-next" aria-hidden="true"></span></button>
+              <span class="transport-divider"></span>
+              <span class="loop-indicator"><span class="loop-icon">↻</span> LOOP</span>
+            </div>
+            <div class="transport-readout"><strong id="current-frame">F 0</strong><span>/</span><span id="total-frames">72</span><span class="transport-time" id="current-time">00:00.00</span></div>
+          </div>
+          <div class="timeline-actions"><span class="zoom-label">ZOOM</span><button class="zoom-button" id="zoom-out-button" type="button" aria-label="タイムラインを縮小">−</button><button class="zoom-button" id="zoom-in-button" type="button" aria-label="タイムラインを拡大">+</button></div>
+        </div>
+        <div class="timeline-body" id="timeline-body">
+          <div class="track-labels">
+            <div class="track-label-head">TRACKS</div>
+            <button class="track-label track-group-toggle" id="transforms-toggle" type="button" title="ボーン別に展開" aria-label="Bonesをボーン別に展開" aria-expanded="false" aria-controls="transform-bone-labels">
+              <span class="track-color transforms"></span><span class="track-title">Bones</span><svg class="track-group-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.25 6 7.75l3.5-3.5"></path></svg>
+            </button>
+            <div class="transform-bone-labels" id="transform-bone-labels" hidden></div>
+            <div class="track-label"><span class="track-color face"></span><span>Expressions</span></div>
+          </div>
+          <div class="timeline-ruler-sticky" id="timeline-ruler-sticky" aria-hidden="true"></div>
+          <div class="timeline-scroll" id="timeline-scroll">
+            <div class="timeline-scroll-content" id="timeline-scroll-content">
+              <div class="ruler" id="timeline-ruler"></div>
+              <div class="track-lanes" id="track-lanes">
+                <div class="track-lane" id="transforms-lane"><span class="lane-name">TRANSFORMS</span><div class="key-row" id="transforms-keys"></div></div>
+                <div class="transform-bone-lanes" id="transform-bone-lanes" hidden></div>
+                <div class="track-lane" id="face-lane"><span class="lane-name">EXPRESSION</span><div class="key-row" id="face-keys"></div></div>
+                <div class="playhead" id="playhead"><span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="app-footer">
+        <span class="footer-label">RELATED</span>
+        <nav class="footer-links footer-meta-links" aria-label="関連リンク">
+          <a href="https://booth.pm/en/items/3331763" target="_blank" rel="noreferrer">VRM Model</a>
+          <a href="https://github.com/yomotsu/vrma-converter" target="_blank" rel="noreferrer">Github Repo</a>
+        </nav>
+        <span class="footer-divider" aria-hidden="true"></span>
+        <span class="footer-label">Tested with:</span>
+        <nav class="footer-links footer-tested-links" aria-label="テスト済みのモーションソース">
+          <a href="https://www.mixamo.com/" target="_blank" rel="noreferrer">Mixamo</a>
+          <a href="https://quaternius.com/packs/universalanimationlibrary.html" target="_blank" rel="noreferrer">Universal Animation Library</a>
+          <a href="https://sites.google.com/a/cgspeed.com/cgspeed/motion-capture/the-daz-friendly-bvh-release-of-cmus-motion-capture-database" target="_blank" rel="noreferrer">CGSpeed (BVH)</a>
+        </nav>
+      </footer>
+
+      <dialog class="fbx-rig-dialog" id="fbx-rig-dialog" aria-labelledby="fbx-rig-title">
+        <form class="fbx-rig-dialog-card" method="dialog">
+          <div class="section-label"><span>FBX RIG TYPE</span></div>
+          <h2 id="fbx-rig-title">このFBXのリグ形式を選択</h2>
+          <p><strong id="fbx-rig-file-name"></strong><br />自動判定できないため、変換方式を選択してください。</p>
+          <div class="fbx-rig-options">
+            <button class="fbx-rig-option" type="submit" value="mixamo"><strong>Mixamo</strong><small>mixamorig humanoid</small></button>
+            <button class="fbx-rig-option" type="submit" value="universal"><strong>Universal Animation Library</strong><small>Universal humanoid rig</small></button>
+          </div>
+          <button class="fbx-rig-cancel" type="submit" value="cancel">キャンセル</button>
+        </form>
+      </dialog>
+
+      <div class="toast" id="toast" role="status" aria-live="polite"><span class="toast-icon">✦</span><span id="toast-message">Ready</span></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
