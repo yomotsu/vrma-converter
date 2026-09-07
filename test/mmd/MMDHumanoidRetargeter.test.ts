@@ -79,6 +79,30 @@ test('extracts center movement as normalized hips translation', () => {
   assert.equal(motion.restHipsY, 8);
 });
 
+test('uses lower-body movement as hips translation when MMD center roles are present', () => {
+  const result: MMDMotionBakeResult = {
+    duration: 1,
+    fps: 30,
+    times: [0, 1],
+    bones: [
+      {
+        ...bone(0, 'センター', new THREE.Quaternion(), new THREE.Vector3(0, 6, 0)),
+        worldPosition: new THREE.VectorKeyframeTrack('センター', [0, 1], [0, 6, 0, 0, 7, 0]),
+      },
+      {
+        ...bone(1, '下半身', new THREE.Quaternion(), new THREE.Vector3(0, 11, 0)),
+        worldPosition: new THREE.VectorKeyframeTrack('下半身', [0, 1], [0, 11, 0, 0, 12, 0]),
+      },
+    ],
+    expressionTracks: [],
+  };
+
+  const motion = retargetMmdMotion(result, new Set(['hips']));
+
+  assert.deepEqual(Array.from(motion.translationTrack!.values), [0, 11, 0, 0, 12, 0]);
+  assert.equal(motion.restHipsY, 11);
+});
+
 test('does not output humanoid tracks absent from the target VRM', () => {
   const result: MMDMotionBakeResult = {
     duration: 0,
