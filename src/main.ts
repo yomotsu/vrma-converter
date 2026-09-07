@@ -869,6 +869,7 @@ function bindEvents(): void {
     applySpeed();
   });
   dom.viewportBackgroundButton.addEventListener('click', stage.toggleViewportBackground);
+  dom.bonesToggleButton.addEventListener('click', stage.toggleBonesVisible);
   dom.resetView.addEventListener('click', resetView);
   dom.viewportZoomOutButton.addEventListener('click', stage.zoomViewportOut);
   dom.viewportZoomButton.addEventListener('click', stage.zoomViewportIn);

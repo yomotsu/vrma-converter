@@ -126,6 +126,7 @@ input:focus-visible {
 .tool-button,
 .transport-button,
 .play-button,
+.loop-toggle,
 .zoom-button {
   border: 0;
   cursor: pointer;
@@ -904,6 +905,7 @@ input:focus-visible {
   font-size: 10px;
   letter-spacing: 0.09em;
   cursor: pointer;
+  transition: 160ms ease;
 }
 
 .loop-toggle.is-on {

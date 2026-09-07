@@ -21,7 +21,7 @@ export type ModelState = {
 
 export type StageDom = Pick<
   DomElements,
-  'viewport' | 'viewportShell' | 'viewportZoomRange' | 'viewportBackgroundButton'
+  'viewport' | 'viewportShell' | 'viewportZoomRange' | 'viewportBackgroundButton' | 'bonesToggleButton'
 >;
 
 export type StageController = {
@@ -36,6 +36,8 @@ export type StageController = {
   fitCameraToModel(model: ModelState | null): void;
   setViewportBackground(background: 'dark' | 'light'): void;
   toggleViewportBackground(): void;
+  setBonesVisible(visible: boolean): void;
+  toggleBonesVisible(): void;
   setViewportZoom(value: number): void;
   zoomViewportIn(): void;
   zoomViewportOut(): void;
@@ -69,6 +71,12 @@ function clamp(value: number, min: number, max: number): number {
 export function getObjectHeight(object: THREE.Object3D): number {
   const box = new THREE.Box3().setFromObject(object);
   return Math.max(0.1, box.max.y - box.min.y);
+}
+
+export function createBoneHelper(root: THREE.Object3D): THREE.SkeletonHelper {
+  const helper = new THREE.SkeletonHelper(root);
+  helper.visible = false;
+  return helper;
 }
 
 function getVrmBones(vrm: VRM): Partial<Record<BoneName, THREE.Object3D>> {
@@ -244,6 +252,33 @@ export function createStage(stageDom: StageDom): StageController {
   gltfLoader.register((parser) => new VRMLoaderPlugin(parser));
   gltfLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 
+  let activeModel: ModelState | null = null;
+  let boneHelper: THREE.SkeletonHelper | null = null;
+  let bonesVisible = false;
+
+  function disposeBoneHelper(): void {
+    if (boneHelper == null) return;
+    scene.remove(boneHelper);
+    boneHelper.geometry.dispose();
+    const material = boneHelper.material;
+    if (Array.isArray(material)) material.forEach((item) => item.dispose());
+    else material.dispose();
+    boneHelper = null;
+  }
+
+  function refreshBoneHelper(): void {
+    disposeBoneHelper();
+    if (activeModel != null && bonesVisible) {
+      boneHelper = createBoneHelper(activeModel.root);
+      boneHelper.visible = true;
+      scene.add(boneHelper);
+    }
+    stageDom.bonesToggleButton.classList.toggle('active', bonesVisible);
+    stageDom.bonesToggleButton.setAttribute('aria-pressed', String(bonesVisible));
+    stageDom.bonesToggleButton.setAttribute('aria-label', bonesVisible ? 'ボーンを非表示' : 'ボーンを表示');
+    stageDom.bonesToggleButton.title = bonesVisible ? 'ボーンを非表示' : 'ボーンを表示';
+  }
+
   function updateStageShadow(model: ModelState | null): void {
     if (model == null) {
       floor.visible = false;
@@ -352,20 +387,32 @@ export function createStage(stageDom: StageDom): StageController {
   }
 
   function replaceModel(nextModel: ModelState, previousModel: ModelState | null): void {
+    disposeBoneHelper();
     if (previousModel != null) {
       scene.remove(previousModel.root);
       disposeObject(previousModel.root);
       if (previousModel.objectUrl != null) URL.revokeObjectURL(previousModel.objectUrl);
     }
     scene.add(nextModel.root);
+    activeModel = nextModel;
     nextModel.root.traverse((object) => { object.frustumCulled = false; });
     updateStageShadow(nextModel);
+    refreshBoneHelper();
     fitCameraToModel(nextModel);
   }
 
   function toggleViewportBackground(): void {
     const isLight = stageDom.viewportShell.classList.contains('light-background');
     setViewportBackground(isLight ? 'dark' : 'light');
+  }
+
+  function setBonesVisible(visible: boolean): void {
+    bonesVisible = visible;
+    refreshBoneHelper();
+  }
+
+  function toggleBonesVisible(): void {
+    setBonesVisible(!bonesVisible);
   }
 
   function setViewportZoom(value: number): void {
@@ -394,6 +441,8 @@ export function createStage(stageDom: StageDom): StageController {
     fitCameraToModel,
     setViewportBackground,
     toggleViewportBackground,
+    setBonesVisible,
+    toggleBonesVisible,
     setViewportZoom,
     zoomViewportIn: () => setViewportDistance(controls.getDistance() * 0.82),
     zoomViewportOut: () => setViewportDistance(controls.getDistance() / 0.82),

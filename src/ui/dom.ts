@@ -42,6 +42,7 @@ export type DomElements = {
   previousFrame: HTMLButtonElement;
   nextFrame: HTMLButtonElement;
   viewportBackgroundButton: HTMLButtonElement;
+  bonesToggleButton: HTMLButtonElement;
   resetView: HTMLButtonElement;
   viewportZoomOutButton: HTMLButtonElement;
   viewportZoomButton: HTMLButtonElement;
@@ -108,6 +109,7 @@ export const dom: DomElements = {
   previousFrame: $<HTMLButtonElement>('#previous-frame-button'),
   nextFrame: $<HTMLButtonElement>('#next-frame-button'),
   viewportBackgroundButton: $<HTMLButtonElement>('#viewport-background-button'),
+  bonesToggleButton: $<HTMLButtonElement>('#bones-toggle-button'),
   resetView: $<HTMLButtonElement>('#reset-view-button'),
   viewportZoomOutButton: $<HTMLButtonElement>('#viewport-zoom-out-button'),
   viewportZoomButton: $<HTMLButtonElement>('#viewport-zoom-button'),
