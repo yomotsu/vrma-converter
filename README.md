@@ -1,6 +1,6 @@
-# Motion Forge — VRMA Converter
+# VRMA Converter
 
-ブラウザ内で Mixamo / Universal Humanoid Rig のモーションを VRM Animation (`.vrma`) に変換する小さな Web アプリです。
+ブラウザ内で Mixamo / Universal Humanoid Rig のモーションを VRM Animation (`.vrma`) に変換する Web アプリです。
 
 ## 起動
 
