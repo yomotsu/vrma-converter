@@ -1,6 +1,6 @@
 # VRMA Converter
 
-ブラウザ内で Mixamo / Universal Humanoid Rig のモーションを VRM Animation (`.vrma`) に変換する Web アプリです。
+[VRMA Converter](https://yomotsu.github.io/vrma-converter)は、ブラウザ内で Mixamo / Universal Humanoid Rig のモーションを VRM Animation (`.vrma`) に変換する Web アプリです。
 
 ## 起動
 
