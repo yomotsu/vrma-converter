@@ -18,14 +18,20 @@ const bone = (
   name: string,
   quaternion: THREE.Quaternion,
   worldPosition: THREE.Vector3,
-): MMDMotionBoneTrack => ({
-  index,
-  name,
-  rotation: qTrack(name, quaternion),
-  position: pTrack(name, new THREE.Vector3()),
-  worldPosition: pTrack(name, worldPosition),
-  restWorldPosition: worldPosition.clone(),
-});
+): MMDMotionBoneTrack => {
+  const normalized = quaternion.clone().normalize();
+  return {
+    index,
+    name,
+    parentIndex: -1,
+    rotation: qTrack(name, quaternion),
+    worldRotation: qTrack(`${name}.world`, normalized),
+    position: pTrack(name, new THREE.Vector3()),
+    worldPosition: pTrack(name, worldPosition),
+    restWorldRotation: new THREE.Quaternion(),
+    restWorldPosition: worldPosition.clone(),
+  };
+};
 
 test('maps standard Japanese and English MMD names to VRM humanoid names', () => {
   assert.equal(mapMmdBoneName('左ひじ'), 'leftLowerArm');
@@ -92,4 +98,35 @@ test('returns a VRMA-ready rotation track for a mapped VMD bone', () => {
   const motion = retargetMmdMotion(result, new Set(['leftUpperArm']));
   assert.equal(motion.rotationTracks.get('leftUpperArm')?.getValueSize(), 4);
   assert.deepEqual(Array.from(motion.rotationTracks.get('leftUpperArm')!.times), [0]);
+});
+
+test('converts an MMD sibling upper-body rotation into VRM spine-local rotation', () => {
+  const hipsWorld = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 1.4);
+  const upperBodyWorld = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 1.7);
+  const withWorldPose = (
+    source: MMDMotionBoneTrack,
+    parentIndex: number,
+    worldRotation: THREE.Quaternion,
+  ): MMDMotionBoneTrack => ({
+    ...source,
+    parentIndex,
+    worldRotation: qTrack(`${source.name}.world`, worldRotation),
+  });
+  const result: MMDMotionBakeResult = {
+    duration: 0,
+    fps: 30,
+    times: [0],
+    bones: [
+      withWorldPose(bone(0, 'センター', new THREE.Quaternion(), new THREE.Vector3(0, 8, 0)), -1, new THREE.Quaternion()),
+      withWorldPose(bone(1, '下半身', hipsWorld, new THREE.Vector3(0, 8, 0)), 0, hipsWorld),
+      withWorldPose(bone(2, '上半身', upperBodyWorld, new THREE.Vector3(0, 8, 0)), 0, upperBodyWorld),
+    ],
+  };
+
+  const motion = retargetMmdMotion(result, new Set(['hips', 'spine']));
+  const actual = new THREE.Quaternion().fromArray(
+    Array.from(motion.rotationTracks.get('spine')!.values) as [number, number, number, number],
+  );
+  const expected = hipsWorld.clone().invert().multiply(upperBodyWorld).normalize();
+  assert.ok(1 - Math.abs(actual.dot(expected)) < 1e-6);
 });

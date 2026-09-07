@@ -56,11 +56,14 @@ export function bakeLoadedMmdMotion(
   mesh.pose();
   mesh.updateMatrixWorld(true);
   const meshWorldInverse = mesh.matrixWorld.clone().invert();
+  const boneIndices = new Map(bones.map((bone, index) => [bone, index] as const));
+  const restWorldRotations = bones.map((bone) => bone.getWorldQuaternion(new THREE.Quaternion()));
   const restWorldPositions = bones.map((bone) => (
     bone.getWorldPosition(new THREE.Vector3()).applyMatrix4(meshWorldInverse)
   ));
   const positionValues = bones.map(() => [] as number[]);
   const rotationValues = bones.map(() => [] as number[]);
+  const worldRotationValues = bones.map(() => [] as number[]);
   const worldPositionValues = bones.map(() => [] as number[]);
   const times = createMmdFrameTimes(animation.duration, fps);
   let previousTime = 0;
@@ -73,6 +76,7 @@ export function bakeLoadedMmdMotion(
     bones.forEach((bone, index) => {
       positionValues[index]!.push(...bone.position.toArray());
       rotationValues[index]!.push(...bone.quaternion.toArray());
+      worldRotationValues[index]!.push(...bone.getWorldQuaternion(new THREE.Quaternion()).toArray());
       worldPositionValues[index]!.push(
         ...bone.getWorldPosition(new THREE.Vector3()).applyMatrix4(meshWorldInverse).toArray(),
       );
@@ -83,10 +87,16 @@ export function bakeLoadedMmdMotion(
   const motionBones: MMDMotionBoneTrack[] = bones.map((bone, index) => ({
     index,
     name: bone.name,
+    parentIndex: bone.parent == null ? -1 : (boneIndices.get(bone.parent as THREE.Bone) ?? -1),
     rotation: new THREE.QuaternionKeyframeTrack(
       `${bone.name}.quaternion`,
       [...times],
       continuousQuaternionValues(rotationValues[index]!),
+    ),
+    worldRotation: new THREE.QuaternionKeyframeTrack(
+      `${bone.name}.worldQuaternion`,
+      [...times],
+      continuousQuaternionValues(worldRotationValues[index]!),
     ),
     position: new THREE.VectorKeyframeTrack(`${bone.name}.position`, [...times], positionValues[index]!),
     worldPosition: new THREE.VectorKeyframeTrack(
@@ -94,6 +104,7 @@ export function bakeLoadedMmdMotion(
       [...times],
       worldPositionValues[index]!,
     ),
+    restWorldRotation: restWorldRotations[index]!.clone(),
     restWorldPosition: restWorldPositions[index]!.clone(),
   }));
 

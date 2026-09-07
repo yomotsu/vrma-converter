@@ -29,4 +29,10 @@ test('samples every PMX bone after the helper has applied its resolved pose', ()
   assert.ok(Math.abs(new THREE.Quaternion().fromArray(
     Array.from(childTrack.values).slice(0, 4) as [number, number, number, number],
   ).dot(resolved)) > 0.999);
+  const childResult = result.bones.find((bone) => bone.name === '左足')!;
+  assert.equal(childResult.parentIndex, 0);
+  assert.ok(Math.abs(new THREE.Quaternion().fromArray(
+    Array.from(childResult.worldRotation.values).slice(0, 4) as [number, number, number, number],
+  ).dot(resolved)) > 0.999);
+  assert.ok(childResult.restWorldRotation.equals(new THREE.Quaternion()));
 });

@@ -134,25 +134,65 @@ function quaternionAt(track: THREE.QuaternionKeyframeTrack, sampleIndex: number)
   return quaternion.lengthSq() < 1e-12 ? quaternion.identity() : quaternion.normalize();
 }
 
-function createRotationTrack(
+function hasQuaternionSamples(track: THREE.QuaternionKeyframeTrack | undefined): boolean {
+  return track != null && track.times.length > 0 && track.values.length >= 4;
+}
+
+function motionWorldQuaternionAt(source: MMDMotionBoneTrack, sampleIndex: number): THREE.Quaternion {
+  // Older callers may only provide local rotations. Keep that data usable while
+  // making the baked world pose the preferred source for hierarchy retargeting.
+  if (!hasQuaternionSamples(source.worldRotation)) return quaternionAt(source.rotation, sampleIndex);
+
+  const current = quaternionAt(source.worldRotation, sampleIndex);
+  const rest = source.restWorldRotation?.clone() ?? new THREE.Quaternion();
+  if (rest.lengthSq() < 1e-12) rest.identity();
+  else rest.normalize();
+  return rest.invert().multiply(current).normalize();
+}
+
+function createQuaternionTrack(
   name: string,
   times: number[],
-  source: MMDMotionBoneTrack,
+  quaternions: THREE.Quaternion[],
 ): THREE.QuaternionKeyframeTrack {
-  const values = times.flatMap((_, sampleIndex) => quaternionAt(source.rotation, sampleIndex).toArray());
+  const values = quaternions.flatMap((quaternion) => quaternion.toArray());
   return new THREE.QuaternionKeyframeTrack(name, [...times], continuousQuaternionValues(values));
 }
 
-function createComposedHipsTrack(
+function composedHipsQuaternions(
   times: number[],
   sources: MMDMotionBoneTrack[],
-): THREE.QuaternionKeyframeTrack {
-  const values = times.flatMap((_, sampleIndex) => {
+): THREE.Quaternion[] {
+  return times.map((_, sampleIndex) => {
     const composed = new THREE.Quaternion();
     for (const source of sources) composed.multiply(quaternionAt(source.rotation, sampleIndex));
-    return composed.normalize().toArray();
+    return composed.normalize();
   });
-  return new THREE.QuaternionKeyframeTrack('hips', [...times], continuousQuaternionValues(values));
+}
+
+function findMappedParentWorldQuaternion(
+  bonesByIndex: ReadonlyMap<number, MMDMotionBoneTrack>,
+  source: MMDMotionBoneTrack,
+  hipsWorldQuaternions: THREE.Quaternion[],
+  sampleIndex: number,
+): THREE.Quaternion {
+  const visited = new Set<number>();
+  let parentIndex = source.parentIndex;
+
+  while (parentIndex >= 0 && !visited.has(parentIndex)) {
+    visited.add(parentIndex);
+    const parent = bonesByIndex.get(parentIndex);
+    if (parent == null) break;
+
+    const parentTarget = mapMmdBoneName(parent.name);
+    if (parentTarget === 'hips') {
+      return hipsWorldQuaternions[sampleIndex]?.clone() ?? new THREE.Quaternion();
+    }
+    if (parentTarget != null) return motionWorldQuaternionAt(parent, sampleIndex);
+    parentIndex = parent.parentIndex;
+  }
+
+  return new THREE.Quaternion();
 }
 
 function createHipsTranslationTrack(
@@ -188,11 +228,15 @@ export function retargetMmdMotion(
     : undefined;
   const hipsSources = centerSources.length > 0 ? centerSources : directHips == null ? [] : [directHips];
   const consumed = new Set(hipsSources.map((bone) => bone.index));
+  const bonesByIndex = new Map(result.bones.map((bone) => [bone.index, bone] as const));
+  const hipsWorldQuaternions = hipsSources.length > 0
+    ? centerSources.length > 0
+      ? composedHipsQuaternions(times, hipsSources)
+      : times.map((_, sampleIndex) => motionWorldQuaternionAt(hipsSources[0]!, sampleIndex))
+    : times.map(() => new THREE.Quaternion());
 
   if (hipsSources.length > 0 && canOutputBone(availableHumanoidNames, 'hips')) {
-    rotationTracks.set('hips', centerSources.length > 0
-      ? createComposedHipsTrack(times, hipsSources)
-      : createRotationTrack('hips', times, hipsSources[0]!));
+    rotationTracks.set('hips', createQuaternionTrack('hips', times, hipsWorldQuaternions));
   }
 
   const translationSource = hipsSources[0];
@@ -206,7 +250,18 @@ export function retargetMmdMotion(
     const targetName = mapMmdBoneName(bone.name);
     if (targetName == null || targetName === 'hips' || !canOutputBone(availableHumanoidNames, targetName)) continue;
     if (rotationTracks.has(targetName)) continue;
-    rotationTracks.set(targetName, createRotationTrack(targetName, times, bone));
+
+    const quaternions = times.map((_, sampleIndex) => {
+      const currentWorld = motionWorldQuaternionAt(bone, sampleIndex);
+      const parentWorld = findMappedParentWorldQuaternion(
+        bonesByIndex,
+        bone,
+        hipsWorldQuaternions,
+        sampleIndex,
+      );
+      return parentWorld.invert().multiply(currentWorld).normalize();
+    });
+    rotationTracks.set(targetName, createQuaternionTrack(targetName, times, quaternions));
   }
 
   return { rotationTracks, translationTrack, restHipsY };

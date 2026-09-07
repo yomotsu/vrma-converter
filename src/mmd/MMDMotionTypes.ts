@@ -3,9 +3,12 @@ import type * as THREE from 'three';
 export type MMDMotionBoneTrack = {
   index: number;
   name: string;
+  parentIndex: number;
   rotation: THREE.QuaternionKeyframeTrack;
+  worldRotation: THREE.QuaternionKeyframeTrack;
   position: THREE.VectorKeyframeTrack;
   worldPosition: THREE.VectorKeyframeTrack;
+  restWorldRotation: THREE.Quaternion;
   restWorldPosition: THREE.Vector3;
 };
 
