@@ -1,5 +1,7 @@
 export { MMDPlayer } from './MMDPlayer.js';
 export type { MMDPlayerOptions } from './MMDPlayer.js';
+export { MMD_PREVIEW_ENABLED, createMmdPreviewController } from './MMDPreview.js';
+export type { MMDPreviewController, MMDPreviewPlayer } from './MMDPreview.js';
 export { MMDLoader } from './loaders/MMDLoader.js';
 export { mapMmdBoneName, retargetMmdMotion } from './MMDHumanoidRetargeter.js';
 export type { MMDHumanoidMotion } from './MMDHumanoidRetargeter.js';

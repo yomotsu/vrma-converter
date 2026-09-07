@@ -11,7 +11,13 @@ import { VRMAnimationLoaderPlugin, VRMLookAtQuaternionProxy } from '@pixiv/three
 import type { VRMAnimation } from '@pixiv/three-vrm-animation';
 import defaultVrmUrl from '../assets/model.vrm?url';
 import defaultMmdModelUrl from '../assets/mobuko.pmx?url';
-import { MMDMotionBaker, MMDPlayer, retargetMmdMotion } from './mmd/index.js';
+import {
+  createMmdPreviewController,
+  MMD_PREVIEW_ENABLED,
+  MMDMotionBaker,
+  MMDPlayer,
+  retargetMmdMotion,
+} from './mmd/index.js';
 import type { MMDMotionBakeResult } from './mmd/index.js';
 
 type BoneName =
@@ -431,7 +437,11 @@ gltfLoader.register((parser) => new VRMLoaderPlugin(parser));
 gltfLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 const fbxLoader = new FBXLoader();
 const bvhLoader = new BVHLoader();
-const mmdPlayer = new MMDPlayer(dom.overlayCanvas, { modelUrl: defaultMmdModelUrl });
+dom.overlayCanvas.hidden = !MMD_PREVIEW_ENABLED;
+const mmdPlayer = MMD_PREVIEW_ENABLED
+  ? new MMDPlayer(dom.overlayCanvas, { modelUrl: defaultMmdModelUrl })
+  : null;
+const mmdPreview = createMmdPreviewController(MMD_PREVIEW_ENABLED, mmdPlayer);
 const mmdBaker = new MMDMotionBaker({ modelUrl: defaultMmdModelUrl, fps: 30 });
 
 const state: {
@@ -1887,13 +1897,16 @@ async function handleAnimationFile(file: File): Promise<void> {
   const request = ++animationRequestSequence;
   const extension = extensionOf(file.name);
   if (extension === 'vmd') {
-    void mmdPlayer.playVmd(file).then(() => {
-      if (request === animationRequestSequence) showToast(`${file.name} を MMD プレビューで再生しています`);
-    }).catch((error: unknown) => {
-      if (request === animationRequestSequence) {
-        showToast(error instanceof Error ? error.message : 'VMD の読み込みに失敗しました');
-      }
-    });
+    const previewPromise = mmdPreview.playVmd?.(file);
+    if (previewPromise != null) {
+      void previewPromise.then(() => {
+        if (request === animationRequestSequence) showToast(`${file.name} を MMD プレビューで再生しています`);
+      }).catch((error: unknown) => {
+        if (request === animationRequestSequence) {
+          showToast(error instanceof Error ? error.message : 'VMD の読み込みに失敗しました');
+        }
+      });
+    }
     setLoading(true, 'BAKING MMD IK TO FK');
     try {
       const baked = await mmdBaker.bakeVmd(file);
@@ -2906,7 +2919,7 @@ function animate(): void {
   }
   if (state.model?.vrm != null) state.model.vrm.update(delta);
   renderer.render(scene, camera);
-  mmdPlayer.update(delta);
+  mmdPreview.update(delta);
   if (performance.now() - state.lastUiUpdate > 40) {
     state.lastUiUpdate = performance.now();
     updatePlayhead();
