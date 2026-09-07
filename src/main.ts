@@ -20,6 +20,7 @@ import { isSupportedAnimationFormat, parseAnimationFile } from './animation/pars
 import { createPreviewAnimation } from './animation/previewAnimation.js';
 import { createVrmaBlob } from './vrma/exportVrma.js';
 import { displayFormatForImport } from './animation/displayFormat.js';
+import { advancePlaybackTime } from './animation/playback.js';
 import { dom } from './ui/dom.js';
 import { installAlwaysVisibleScrollbars } from './ui/scrollbars.js';
 import { allAnimationKeyTimes, createTimelineController } from './ui/timeline.js';
@@ -69,6 +70,7 @@ const state: {
   mixer: THREE.AnimationMixer | null;
   action: THREE.AnimationAction | null;
   isPlaying: boolean;
+  loopEnabled: boolean;
   time: number;
   speedMultiplier: number;
   bakeFps: number;
@@ -84,6 +86,7 @@ const state: {
   mixer: null,
   action: null,
   isPlaying: true,
+  loopEnabled: true,
   time: 0,
   speedMultiplier: 1,
   bakeFps: DEFAULT_BAKE_FPS,
@@ -735,6 +738,14 @@ function setPlayState(playing: boolean): void {
   dom.play.setAttribute('aria-label', playing ? '一時停止' : '再生');
 }
 
+function setLoopEnabled(enabled: boolean): void {
+  state.loopEnabled = enabled;
+  dom.loopToggle.classList.toggle('is-on', enabled);
+  dom.loopToggle.setAttribute('aria-pressed', String(enabled));
+  dom.loopToggle.setAttribute('aria-label', enabled ? 'ループ再生を無効' : 'ループ再生を有効');
+  dom.loopToggle.title = enabled ? 'ループ再生を無効' : 'ループ再生を有効';
+}
+
 function seekTo(time: number): void {
   if (state.animation == null) return;
   const fps = Math.max(1, state.animation.sourceFps);
@@ -848,6 +859,7 @@ function bindEvents(): void {
     setPlayState(playing);
     if (!playing) timeline.centerOnPlayhead();
   });
+  dom.loopToggle.addEventListener('click', () => setLoopEnabled(!state.loopEnabled));
   dom.previousFrame.addEventListener('click', () => seekTo(Math.max(0, state.time - 1 / (state.animation?.sourceFps ?? 30))));
   dom.nextFrame.addEventListener('click', () => seekTo(Math.min(state.animation?.duration ?? 0, state.time + 1 / (state.animation?.sourceFps ?? 30))));
   dom.speedMultiplier.addEventListener('input', () => {
@@ -987,8 +999,9 @@ function animate(): void {
   requestAnimationFrame(animate);
   const delta = Math.min(0.05, clock.getDelta());
   if (state.animation != null && state.isPlaying && state.mixer != null) {
-    state.time += delta;
-    if (state.time > state.animation.duration) state.time %= state.animation.duration;
+    const advanced = advancePlaybackTime(state.time, delta, state.animation.duration, state.loopEnabled);
+    state.time = advanced.time;
+    if (!advanced.playing) setPlayState(false);
     state.mixer.setTime(state.time);
   }
   if (state.model?.vrm != null) state.model.vrm.update(delta);

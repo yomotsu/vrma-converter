@@ -892,14 +892,27 @@ input:focus-visible {
   margin: 0 5px;
 }
 
-.loop-indicator {
+.loop-toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  border: 0;
+  padding: 2px 5px;
   color: var(--text-dim);
+  background: transparent;
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.09em;
+  cursor: pointer;
+}
+
+.loop-toggle.is-on {
+  color: var(--text-main);
+  background: rgba(83, 207, 200, 0.1);
+}
+
+.loop-toggle:hover {
+  color: var(--text-main);
 }
 
 .loop-icon {

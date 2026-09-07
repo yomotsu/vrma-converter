@@ -35,6 +35,7 @@ export type DomElements = {
   speedMultiplierValue: HTMLElement;
   play: HTMLButtonElement;
   playIcon: HTMLElement;
+  loopToggle: HTMLButtonElement;
   currentFrame: HTMLElement;
   totalFrames: HTMLElement;
   currentTime: HTMLElement;
@@ -100,6 +101,7 @@ export const dom: DomElements = {
   speedMultiplierValue: $<HTMLElement>('#speed-multiplier-value'),
   play: $<HTMLButtonElement>('#play-button'),
   playIcon: $<HTMLElement>('#play-icon'),
+  loopToggle: $<HTMLButtonElement>('#loop-toggle'),
   currentFrame: $<HTMLElement>('#current-frame'),
   totalFrames: $<HTMLElement>('#total-frames'),
   currentTime: $<HTMLElement>('#current-time'),
