@@ -173,11 +173,8 @@ function normalizedBoneText(value: string): string {
 }
 
 export function mapSourceBone(name: string): BoneName | null {
-  const mixamoName = Object.keys(mixamoVRMRigMap).find((key) => key.toLowerCase() === name.toLowerCase());
-  if (mixamoName != null) return mixamoVRMRigMap[mixamoName] ?? null;
   const clean = normalizedBoneText(name)
     .replace(/^(left|right|l|r)hand(?=(thumb|index|middle|ring|little|pinky))/, '$1')
-    .replace(/hand(?=(thumb|index|middle|ring|little|pinky))/, '')
     .replace(/pinky/g, 'little');
   for (const [bone, aliases] of boneAliases) {
     if (aliases.includes(clean)) return bone;
@@ -196,7 +193,8 @@ export function mapSourceBone(name: string): BoneName | null {
 }
 
 export function mapMixamoBone(name: string): BoneName | null {
-  return mixamoVRMRigMap[name] ?? mapSourceBone(name);
+  const mappedName = Object.keys(mixamoVRMRigMap).find((key) => key.toLowerCase() === name.toLowerCase());
+  return (mappedName == null ? null : mixamoVRMRigMap[mappedName]) ?? mapSourceBone(name);
 }
 
 export function mapUniversalBone(name: string): BoneName | null {

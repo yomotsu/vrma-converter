@@ -891,8 +891,7 @@ function retargetUniversalClip(
   clip.tracks.forEach((sourceTrack) => {
     const [sourceNodeName, propertyName] = sourceTrack.name.split('.');
     if (sourceNodeName == null || propertyName == null) return;
-    const sourceBone = universalVrmRigMap[sourceNodeName]
-      ?? (sourceNodeName.toLowerCase() === 'root' ? null : mapSourceBone(sourceNodeName));
+    const sourceBone = mapUniversalBone(sourceNodeName);
     if (sourceBone == null || (vrm != null && vrm.humanoid.getNormalizedBoneNode(sourceBone as never) == null)) return;
     const sourceNode = asset.getObjectByName(sourceNodeName);
     if (sourceNode?.parent == null) return;
@@ -2345,6 +2344,13 @@ function bindEvents(): void {
     scheduleAlwaysScrollbarRefresh();
   }, { passive: true });
   dom.viewport.addEventListener('contextmenu', (event) => event.preventDefault());
+  // OrbitControls normally consumes wheel events for dolly. Keep pinch-to-zoom,
+  // but let wheel events retain their browser default and do nothing to the camera.
+  dom.viewport.addEventListener('wheel', (event) => {
+    // Trackpad pinch gestures are exposed as ctrl+wheel by most browsers.
+    // Preserve those while keeping ordinary wheel scrolling out of dolly/zoom.
+    if (!event.ctrlKey) event.stopImmediatePropagation();
+  }, { capture: true });
   dom.download.addEventListener('click', downloadVrma);
   dom.bakeFps.addEventListener('change', () => {
     const animation = state.animation;

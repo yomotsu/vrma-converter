@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 
-import { detectAnimationRig, mapSourceBone } from '../../src/animation/rigMapping.ts';
+import { detectAnimationRig, mapMixamoBone, mapSourceBone } from '../../src/animation/rigMapping.ts';
 import { retargetMixamoClip } from '../../src/animation/mixamoParser.ts';
 
 test('maps Mixamo and common aliases to VRM humanoid names', () => {
   assert.equal(mapSourceBone('mixamorigLeftForeArm'), 'leftLowerArm');
-  assert.equal(mapSourceBone('mixamorigRightHandIndex2'), 'rightIndexIntermediate');
+  assert.equal(mapMixamoBone('mixamorigRightHandIndex2'), 'rightIndexIntermediate');
   assert.equal(mapSourceBone('pelvis'), 'hips');
 });
 
@@ -42,4 +42,32 @@ test('retargetMixamoClip removes rest-world rotation and keeps hips translation'
   assert.equal(result.restHipsY, 1);
   assert.ok(Math.abs(armRotation.angleTo(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2))) < 1e-3);
   assert.deepEqual(Array.from(result.tracks.get('hips')!.translation!.values), [0, 1, 0]);
+});
+
+test('retargetMixamoClip filters bones unavailable on the target VRM', () => {
+  const asset = new THREE.Group();
+  const hips = new THREE.Bone();
+  hips.name = 'mixamorigHips';
+  hips.position.y = 1;
+  const arm = new THREE.Bone();
+  arm.name = 'mixamorigLeftArm';
+  hips.add(arm);
+  asset.add(hips);
+  const clip = new THREE.AnimationClip('mixamo', 1, [
+    new THREE.QuaternionKeyframeTrack('mixamorigLeftArm.quaternion', [0], [0, 0, 0, 1]),
+  ]);
+  const targetVrm = { humanoid: { getNormalizedBoneNode: () => null } } as never;
+
+  assert.deepEqual(retargetMixamoClip(asset, clip, targetVrm).tracks.size, 0);
+});
+
+test('retargetMixamoClip rejects missing or non-positive hips height', () => {
+  const missing = new THREE.Group();
+  assert.throws(() => retargetMixamoClip(missing, new THREE.AnimationClip('mixamo', 1), null), /hips の高さ/);
+
+  const nonPositive = new THREE.Group();
+  const hips = new THREE.Bone();
+  hips.name = 'mixamorigHips';
+  nonPositive.add(hips);
+  assert.throws(() => retargetMixamoClip(nonPositive, new THREE.AnimationClip('mixamo', 1), null), /hips の高さ/);
 });
