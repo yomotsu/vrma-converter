@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { continuousQuaternionValues } from './MMDMotionMath.ts';
 import { retargetMmdExpressions } from './MMDExpressionRetargeter.ts';
-import type { MMDExpressionAvailability, MMDExpressionMotion } from './MMDExpressionRetargeter.ts';
+import type { MMDExpressionAvailability, MMDExpressionMotion } from './MMDExpressionRetargeter.js';
 import type { MMDMotionBakeResult, MMDMotionBoneTrack } from './MMDMotionTypes.js';
 
 export type MMDHumanoidMotion = {

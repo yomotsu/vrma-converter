@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import type { VRM } from '@pixiv/three-vrm';
 
-import type { RetargetedMotion } from './mixamoParser.ts';
+import type { RetargetedMotion } from './mixamoParser.js';
 import { mapUniversalBone } from './rigMapping.ts';
 import { makeQuaternionTrack, makeVectorTrack, setTrack } from './trackUtils.ts';
-import type { MotionTrackSet } from './types.ts';
+import type { MotionTrackSet } from './types.js';
 
 function evaluateTrackAt(track: THREE.KeyframeTrack, time: number): number[] {
   const size = track.getValueSize();

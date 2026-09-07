@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { getSourceTrackBoneName, mapSourceBone, trackPathFor } from './rigMapping.ts';
 import { makeQuaternionTrack, makeVectorTrack, setTrack } from './trackUtils.ts';
-import type { MotionTrackSet } from './types.ts';
+import type { MotionTrackSet } from './types.js';
 
 function normalizeSourceQuaternionTrack(track: THREE.KeyframeTrack): THREE.QuaternionKeyframeTrack {
   const times = Array.from(track.times);

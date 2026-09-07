@@ -11,9 +11,9 @@ import { isDazFriendlyBvh, retargetDazBvhClip } from './bvhParser.ts';
 import { retargetGenericClip } from './genericParser.ts';
 import { retargetMixamoClip } from './mixamoParser.ts';
 import { detectAnimationRig } from './rigMapping.ts';
-import type { AnimationRigType } from './rigMapping.ts';
+import type { AnimationRigType } from './rigMapping.js';
 import { emptyExpressionTrackSet } from './trackUtils.ts';
-import type { LoadedClip } from './types.ts';
+import type { LoadedClip } from './types.js';
 import { retargetUniversalClip } from './universalParser.ts';
 import { tracksFromVrma } from './vrmaParser.ts';
 

@@ -1,11 +1,8 @@
 import './style.css';
 
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import type { VRM } from '@pixiv/three-vrm';
-import { VRMAnimationLoaderPlugin, VRMLookAtQuaternionProxy } from '@pixiv/three-vrm-animation';
+import { VRMLookAtQuaternionProxy } from '@pixiv/three-vrm-animation';
 import defaultVrmUrl from '../assets/model.vrm?url';
 import defaultMmdModelUrl from '../assets/mobuko.pmx?url';
 import {
@@ -16,8 +13,7 @@ import {
   retargetMmdMotion,
 } from './mmd/index.js';
 import type { MMDMotionBakeResult } from './mmd/index.js';
-import { getTimelineScrollLeftForPlayhead } from './timelineScroll.js';
-import type { AnimationState, BoneName, BakeSettings, ExpressionTrackSet, LoadedClip, MotionTrackSet, TrackPath } from './animation/types.js';
+import type { AnimationState, BoneName, BakeSettings, ExpressionTrackSet, LoadedClip, MotionTrackSet } from './animation/types.js';
 import { HUMAN_BONES } from './animation/rigMapping.js';
 import type { AnimationRigType } from './animation/rigMapping.js';
 import { isSupportedAnimationFormat, parseAnimationFile } from './animation/parseAnimationFile.js';
@@ -25,6 +21,9 @@ import { createPreviewAnimation } from './animation/previewAnimation.js';
 import { createVrmaBlob } from './vrma/exportVrma.js';
 import { dom } from './ui/dom.js';
 import { installAlwaysVisibleScrollbars } from './ui/scrollbars.js';
+import { allAnimationKeyTimes, createTimelineController } from './ui/timeline.js';
+import { createStage } from './viewer/stage.js';
+import type { ModelState } from './viewer/stage.js';
 import {
   cloneExpressionTrackSet,
   cloneTrackSet,
@@ -50,125 +49,11 @@ const MAX_BAKE_FPS = 240;
 const DEFAULT_BAKE_FPS = 30;
 const MIN_BAKE_FRAME_STEP = 1;
 const MAX_BAKE_FRAME_STEP = 120;
-const TIMELINE_EDGE_PADDING = 40;
 const TIMELINE_AUTO_SCROLL_EDGE = 48;
 const TIMELINE_AUTO_SCROLL_MAX_SPEED = 14;
-const DEFAULT_TIMELINE_PIXELS_PER_SECOND = 240;
-
-type ModelState = {
-  root: THREE.Object3D;
-  vrm?: VRM;
-  bones: Partial<Record<BoneName, THREE.Object3D>>;
-  name: string;
-  source: 'bundled' | 'local';
-  objectUrl?: string;
-  height: number;
-};
-
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x07111c, 0.055);
-const renderer = new THREE.WebGLRenderer({
-  canvas: dom.viewport,
-  antialias: true,
-  alpha: true,
-  powerPreference: 'high-performance',
-});
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-const camera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
-camera.position.set(0, 1.28, 3.75);
-const controls = new OrbitControls(camera, dom.viewport);
-// OrbitControls maps right-drag to pan and shift + left-drag to pan.
-controls.enablePan = true;
-controls.screenSpacePanning = true;
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.minDistance = 2;
-controls.maxDistance = 8;
-controls.target.set(0, 1.08, 0);
-controls.update();
-controls.addEventListener('change', updateViewportZoomUi);
-
-const hemiLight = new THREE.HemisphereLight(0xa9e8e1, 0x102337, 2.25);
-scene.add(hemiLight);
-const keyLight = new THREE.DirectionalLight(0xfff6e6, 3.4);
-keyLight.position.set(2.8, 4.5, 3.5);
-scene.add(keyLight);
-const rimLight = new THREE.PointLight(0x54d8d8, 5.5, 6, 2);
-rimLight.position.set(-2.2, 1.9, -1.5);
-scene.add(rimLight);
-
-const STAGE_SHADOW_FOOT_BONES: BoneName[] = ['leftFoot', 'leftToes', 'rightFoot', 'rightToes'];
-const STAGE_SHADOW_FOOT_WEIGHT_THRESHOLD = 0.2;
-const STAGE_GRID_SIZE = 7;
-const STAGE_GRID_DIVISIONS = 28;
-const STAGE_GRID_CELL_SIZE = STAGE_GRID_SIZE / STAGE_GRID_DIVISIONS;
-const STAGE_SHADOW_RADIUS_IN_GRID_CELLS = 5;
-const STAGE_RING_INNER_RADIUS_IN_GRID_CELLS = 5.9;
-const STAGE_RING_OUTER_RADIUS_IN_GRID_CELLS = 6;
-const STAGE_SHADOW_RADIUS = STAGE_GRID_CELL_SIZE * STAGE_SHADOW_RADIUS_IN_GRID_CELLS;
-const STAGE_RING_INNER_RADIUS = STAGE_RING_INNER_RADIUS_IN_GRID_CELLS / STAGE_SHADOW_RADIUS_IN_GRID_CELLS;
-const STAGE_RING_OUTER_RADIUS = STAGE_RING_OUTER_RADIUS_IN_GRID_CELLS / STAGE_SHADOW_RADIUS_IN_GRID_CELLS;
-const STAGE_FLOOR_DARK_MODE_COLOR = 0xffffff;
-const STAGE_FLOOR_LIGHT_MODE_COLOR = 0x0a242d;
-const STAGE_FLOOR_OPACITY = 0.22;
-const STAGE_GRID_DARK_MODE_COLORS = [0x4ba7ac, 0x235764] as const;
-const STAGE_GRID_LIGHT_MODE_COLORS = [0x2a6d71, 0x16333f] as const;
-const STAGE_GRID_DARK_MODE_OPACITY = 0.55;
-const STAGE_GRID_LIGHT_MODE_OPACITY = 0.28;
-
-const stageGroup = new THREE.Group();
-scene.add(stageGroup);
-const grid = new THREE.GridHelper(
-  STAGE_GRID_SIZE,
-  STAGE_GRID_DIVISIONS,
-  STAGE_GRID_DARK_MODE_COLORS[0],
-  STAGE_GRID_DARK_MODE_COLORS[1],
-);
-const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
-function setStageGridAppearance(isLight: boolean): void {
-  const colors = isLight ? STAGE_GRID_LIGHT_MODE_COLORS : STAGE_GRID_DARK_MODE_COLORS;
-  const opacity = isLight ? STAGE_GRID_LIGHT_MODE_OPACITY : STAGE_GRID_DARK_MODE_OPACITY;
-  gridMaterials.forEach((material, index) => {
-    material.transparent = true;
-    material.opacity = opacity;
-    if (material instanceof THREE.LineBasicMaterial) material.color.set(colors[index] ?? colors[0]);
-  });
-}
-setStageGridAppearance(false);
-grid.position.y = 0.005;
-stageGroup.add(grid);
-
-const floorMaterial = new THREE.MeshBasicMaterial({
-  color: STAGE_FLOOR_DARK_MODE_COLOR,
-  transparent: true,
-  opacity: STAGE_FLOOR_OPACITY,
-  depthWrite: false,
-  side: THREE.DoubleSide,
-});
-const floor = new THREE.Mesh(new THREE.CircleGeometry(1, 80), floorMaterial);
-floor.rotation.x = -Math.PI / 2;
-floor.position.y = 0.01;
-floor.visible = false;
-stageGroup.add(floor);
-
-const floorRing = new THREE.Mesh(
-  new THREE.RingGeometry(STAGE_RING_INNER_RADIUS, STAGE_RING_OUTER_RADIUS, 96),
-  new THREE.MeshBasicMaterial({ color: 0x53cfc8, opacity: 1, side: THREE.DoubleSide }),
-);
-floorRing.rotation.x = -Math.PI / 2;
-floorRing.position.y = 0.015;
-floorRing.visible = false;
-stageGroup.add(floorRing);
 
 const clock = new THREE.Clock();
-const gltfLoader = new GLTFLoader();
-gltfLoader.crossOrigin = 'anonymous';
-gltfLoader.register((parser) => new VRMLoaderPlugin(parser));
-gltfLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+const stage = createStage(dom);
 dom.overlayCanvas.hidden = !MMD_PREVIEW_ENABLED;
 const mmdPlayer = MMD_PREVIEW_ENABLED
   ? new MMDPlayer(dom.overlayCanvas, { modelUrl: defaultMmdModelUrl })
@@ -188,7 +73,6 @@ const state: {
   bakeFps: number;
   bakeFrameStep: number;
   zoom: number;
-  timelinePixelsPerSecond: number | null;
   transformsExpanded: boolean;
   lastUiUpdate: number;
   toastTimer: number | undefined;
@@ -204,11 +88,17 @@ const state: {
   bakeFps: DEFAULT_BAKE_FPS,
   bakeFrameStep: MIN_BAKE_FRAME_STEP,
   zoom: 1,
-  timelinePixelsPerSecond: null,
   transformsExpanded: false,
   lastUiUpdate: 0,
   toastTimer: undefined,
 };
+
+const timeline = createTimelineController(dom, {
+  getAnimation: () => state.animation,
+  getTime: () => state.time,
+  getZoom: () => state.zoom,
+  getTransformsExpanded: () => state.transformsExpanded,
+});
 
 function showToast(message: string): void {
   dom.toastMessage.textContent = message;
@@ -258,245 +148,22 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function getObjectHeight(object: THREE.Object3D): number {
-  const box = new THREE.Box3().setFromObject(object);
-  return Math.max(0.1, box.max.y - box.min.y);
-}
-
-function getStageShadowFootBones(model: ModelState): Map<BoneName, THREE.Object3D> {
-  const bones = new Map<BoneName, THREE.Object3D>();
-  STAGE_SHADOW_FOOT_BONES.forEach((boneName) => {
-    const bone = model.vrm?.humanoid.getRawBoneNode(boneName as never) ?? model.bones[boneName];
-    if (bone != null) bones.set(boneName, bone);
-  });
-  return bones;
-}
-
-function getStageShadowFootprint(model: ModelState, footBones: Map<BoneName, THREE.Object3D>): THREE.Box3 | null {
-  const footBoneSet = new Set(footBones.values());
-  const bounds = new THREE.Box3();
-  const vertex = new THREE.Vector3();
-  let sampleCount = 0;
-
-  model.root.updateMatrixWorld(true);
-  model.root.traverse((object) => {
-    if (!(object instanceof THREE.SkinnedMesh)) return;
-    const skinIndex = object.geometry.getAttribute('skinIndex');
-    const skinWeight = object.geometry.getAttribute('skinWeight');
-    if (skinIndex == null || skinWeight == null) return;
-
-    for (let index = 0; index < skinIndex.count; index += 1) {
-      let footWeight = 0;
-      for (let component = 0; component < skinIndex.itemSize; component += 1) {
-        const bone = object.skeleton.bones[skinIndex.getComponent(index, component)];
-        if (footBoneSet.has(bone)) footWeight += skinWeight.getComponent(index, component);
-      }
-      if (footWeight < STAGE_SHADOW_FOOT_WEIGHT_THRESHOLD) continue;
-
-      object.getVertexPosition(index, vertex);
-      object.localToWorld(vertex);
-      bounds.expandByPoint(vertex);
-      sampleCount += 1;
-    }
-  });
-
-  if (sampleCount > 0 && !bounds.isEmpty()) return bounds;
-
-  // A few VRMs have no skinned foot vertices. Use the humanoid foot/toe nodes
-  // as a conservative fallback, still avoiding the full (often T-pose) bounds.
-  const leftFoot = footBones.get('leftFoot');
-  const leftToes = footBones.get('leftToes');
-  const rightFoot = footBones.get('rightFoot');
-  const rightToes = footBones.get('rightToes');
-  const footPoints = new Map<BoneName, THREE.Vector3>();
-  footBones.forEach((bone, boneName) => {
-    const point = new THREE.Vector3();
-    bone.getWorldPosition(point);
-    footPoints.set(boneName, point);
-    bounds.expandByPoint(point);
-  });
-  if (bounds.isEmpty()) return null;
-
-  const footLength = Math.max(
-    leftFoot != null && leftToes != null ? getHorizontalDistance(footPoints.get('leftFoot'), footPoints.get('leftToes')) : 0,
-    rightFoot != null && rightToes != null ? getHorizontalDistance(footPoints.get('rightFoot'), footPoints.get('rightToes')) : 0,
-  );
-  const size = bounds.getSize(new THREE.Vector3());
-  const padding = Math.max(0.03, footLength * 0.35, Math.max(size.x, size.z) * 0.2);
-  bounds.min.x -= padding;
-  bounds.max.x += padding;
-  bounds.min.z -= padding;
-  bounds.max.z += padding;
-  return bounds;
-}
-
-function getHorizontalDistance(first: THREE.Vector3 | undefined, second: THREE.Vector3 | undefined): number {
-  if (first == null || second == null) return 0;
-  return Math.hypot(first.x - second.x, first.z - second.z);
-}
-
-function updateStageShadow(model: ModelState | null): void {
-  if (model == null) {
-    floor.visible = false;
-    floorRing.visible = false;
-    return;
-  }
-  const footBones = getStageShadowFootBones(model);
-  const bounds = getStageShadowFootprint(model, footBones);
-  if (bounds == null) {
-    floor.visible = false;
-    floorRing.visible = false;
-    return;
-  }
-
-  const radius = STAGE_SHADOW_RADIUS;
-  const centerX = (bounds.min.x + bounds.max.x) * 0.5;
-  const centerZ = (bounds.min.z + bounds.max.z) * 0.5;
-  const groundY = bounds.min.y + Math.max(0.001, radius * 0.02);
-  floor.scale.setScalar(radius);
-  floor.position.set(centerX, groundY, centerZ);
-  floorRing.scale.setScalar(radius);
-  floorRing.position.set(centerX, groundY + Math.max(0.001, radius * 0.015), centerZ);
-  floor.visible = true;
-  floorRing.visible = true;
-}
-
-function getVrmBones(vrm: VRM): Partial<Record<BoneName, THREE.Object3D>> {
-  const bones: Partial<Record<BoneName, THREE.Object3D>> = {};
-  HUMAN_BONES.forEach((boneName) => {
-    const bone = vrm.humanoid.getNormalizedBoneNode(boneName as never);
-    if (bone != null) bones[boneName] = bone;
-  });
-  return bones;
-}
-
-function disposeObject(root: THREE.Object3D): void {
-  root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (mesh.geometry != null) mesh.geometry.dispose();
-    const material = mesh.material;
-    if (Array.isArray(material)) material.forEach((item) => item.dispose());
-    else if (material != null) material.dispose();
-  });
-}
-
-function replaceModel(nextModel: ModelState): void {
-  if (state.mixer != null) {
-    state.mixer.stopAllAction();
-    state.mixer = null;
-    state.action = null;
-  }
-  if (state.model != null) {
-    scene.remove(state.model.root);
-    disposeObject(state.model.root);
-    if (state.model.objectUrl != null) URL.revokeObjectURL(state.model.objectUrl);
-  }
-  state.model = nextModel;
-  scene.add(nextModel.root);
-  nextModel.root.traverse((object) => { object.frustumCulled = false; });
-  updateStageShadow(nextModel);
-  fitCameraToModel();
-  rebuildAction();
-  updateInterface();
-}
-
-function fitCameraToModel(): void {
-  if (state.model == null) return;
-  const height = state.model.height || getObjectHeight(state.model.root);
-  const targetY = height * 0.5;
-  controls.minDistance = Math.max(0.5, height * 0.75);
-  controls.maxDistance = Math.max(6, height * 5);
-  const fitDistance = clamp(height * 2.2, controls.minDistance + 0.01, controls.maxDistance * 0.92);
-  controls.target.set(0, targetY, 0);
-  camera.position.set(0, targetY + height * 0.08, fitDistance);
-  camera.near = Math.max(0.01, height / 100);
-  camera.far = height * 20;
-  camera.updateProjectionMatrix();
-  controls.update();
-  updateViewportZoomUi();
-}
-
-function updateViewportZoomUi(): void {
-  const span = Math.max(0.001, controls.maxDistance - controls.minDistance);
-  const zoom = ((controls.maxDistance - controls.getDistance()) / span) * 100;
-  dom.viewportZoomRange.value = clamp(zoom, 0, 100).toFixed(0);
-}
-
-type ViewportBackground = 'dark' | 'light';
-
-function setViewportBackground(background: ViewportBackground): void {
-  const isLight = background === 'light';
-  dom.viewportShell.classList.toggle('light-background', isLight);
-  setStageGridAppearance(isLight);
-  floorMaterial.color.set(isLight ? STAGE_FLOOR_LIGHT_MODE_COLOR : STAGE_FLOOR_DARK_MODE_COLOR);
-  floorMaterial.opacity = STAGE_FLOOR_OPACITY;
-  dom.viewportBackgroundButton.setAttribute('aria-pressed', String(isLight));
-  const nextBackgroundLabel = isLight ? '黒っぽい背景に切り替え' : '白っぽい背景に切り替え';
-  dom.viewportBackgroundButton.title = nextBackgroundLabel;
-  dom.viewportBackgroundButton.setAttribute('aria-label', nextBackgroundLabel);
-}
-
-function toggleViewportBackground(): void {
-  const isLight = dom.viewportShell.classList.contains('light-background');
-  setViewportBackground(isLight ? 'dark' : 'light');
-}
-
-function setViewportZoom(value: number): void {
-  const normalized = clamp(value, 0, 100) / 100;
-  const distance = controls.maxDistance - normalized * (controls.maxDistance - controls.minDistance);
-  setViewportDistance(distance);
-}
-
-function setViewportDistance(distance: number): void {
-  const nextDistance = clamp(distance, controls.minDistance, controls.maxDistance);
-  const direction = camera.position.clone().sub(controls.target);
-  if (direction.lengthSq() < 0.000001) direction.set(0, 0, 1);
-  direction.normalize();
-  camera.position.copy(controls.target).addScaledVector(direction, nextDistance);
-  controls.update();
-  updateViewportZoomUi();
-}
-
-function zoomViewportIn(): void {
-  setViewportDistance(controls.getDistance() * 0.82);
-}
-
-function zoomViewportOut(): void {
-  setViewportDistance(controls.getDistance() / 0.82);
-}
-
-async function loadVrmUrl(url: string, name: string, source: 'bundled' | 'local', objectUrl?: string): Promise<void> {
+async function loadVrmUrl(url: string, name: string, source: ModelState['source'], objectUrl?: string): Promise<void> {
   const previousModel = state.model;
-  if (previousModel != null) previousModel.root.visible = false;
-  updateStageShadow(null);
   setLoading(true, 'LOADING VRM AVATAR');
   try {
-    const gltf = await gltfLoader.loadAsync(url);
-    const vrm = (gltf.userData as { vrm?: VRM }).vrm;
-    if (vrm == null) throw new Error('This file does not contain a VRM avatar.');
-    VRMUtils.rotateVRM0(vrm);
-    if (vrm.lookAt != null && vrm.scene.children.find((object) => object instanceof VRMLookAtQuaternionProxy) == null) {
-      const lookAtProxy = new VRMLookAtQuaternionProxy(vrm.lookAt);
-      lookAtProxy.name = 'VRMLookAtQuaternionProxy';
-      vrm.scene.add(lookAtProxy);
+    const nextModel = await stage.loadVrmUrl(url, name, source, objectUrl, previousModel);
+    if (state.mixer != null) {
+      state.mixer.stopAllAction();
+      state.mixer = null;
+      state.action = null;
     }
-    const model: ModelState = {
-      root: vrm.scene,
-      vrm,
-      bones: getVrmBones(vrm),
-      name,
-      source,
-      objectUrl,
-      height: getObjectHeight(vrm.scene),
-    };
-    replaceModel(model);
+    stage.replaceModel(nextModel, previousModel);
+    state.model = nextModel;
+    rebuildAction();
+    updateInterface();
     showToast(`${name} をアバターとして読み込みました`);
   } catch (error) {
-    if (state.model === previousModel && previousModel != null) {
-      previousModel.root.visible = true;
-      updateStageShadow(previousModel);
-    }
-    if (objectUrl != null) URL.revokeObjectURL(objectUrl);
     const message = error instanceof Error ? error.message : 'VRM の読み込みに失敗しました';
     showToast(message);
     throw error;
@@ -807,7 +474,7 @@ function selectAnimation(id: string): void {
   state.isPlaying = true;
   processCurrentTracks();
   renderAnimationList();
-  renderTimeline();
+  timeline.render();
   updateInterface();
   focusSelectedAnimation();
   if (!next.compatible) showToast(`${next.clipName} に対応する humanoid ボーンがありません`);
@@ -840,7 +507,7 @@ function removeAnimation(id: string): void {
     }
   }
   renderAnimationList();
-  renderTimeline();
+  timeline.render();
   updateInterface();
   showToast(`${removed.clipName} を一覧から削除しました`);
 }
@@ -920,7 +587,7 @@ function processCurrentTracks(): void {
       : sampleTrack(state.animation.sourceLookAtTrack, state.animation.duration, state.animation.bakePreview, 'rotation') as THREE.QuaternionKeyframeTrack;
   if (state.model != null) rebuildAction();
   setPlayState(state.isPlaying);
-  renderTimeline();
+  timeline.render();
   updateInterface();
 }
 
@@ -992,297 +659,6 @@ function revertBake(): void {
   showToast('オリジナルのファイル状態に戻しました');
 }
 
-function uniqueKeyTimes(set: MotionTrackSet): number[] {
-  const values = new Set<number>();
-  set.forEach((tracks) => {
-    Object.values(tracks).forEach((track) => {
-      track?.times.forEach((time) => values.add(Math.round(time * 1000) / 1000));
-    });
-  });
-  return Array.from(values).sort((a, b) => a - b);
-}
-
-function uniqueExpressionKeyTimes(set: ExpressionTrackSet): number[] {
-  const values = new Set<number>();
-  set.preset.forEach((track) => track.times.forEach((time) => values.add(Math.round(time * 1000) / 1000)));
-  set.custom.forEach((track) => track.times.forEach((time) => values.add(Math.round(time * 1000) / 1000)));
-  return Array.from(values).sort((a, b) => a - b);
-}
-
-function allAnimationKeyTimes(animation: AnimationState): number[] {
-  return mergeKeyTimes(uniqueKeyTimes(animation.tracks), uniqueExpressionKeyTimes(animation.expressionTracks));
-}
-
-function laneTimes(set: MotionTrackSet, paths: TrackPath[]): number[] {
-  const values = new Set<number>();
-  set.forEach((tracks, bone) => {
-    const isBody = bone !== 'hips';
-    const allowed = isBody ? paths.includes('rotation') : paths.includes('translation') || paths.includes('rotation');
-    if (!allowed) return;
-    paths.forEach((path) => tracks[path]?.times.forEach((time) => values.add(Math.round(time * 1000) / 1000)));
-  });
-  return Array.from(values).sort((a, b) => a - b);
-}
-
-function mergeKeyTimes(...lists: number[][]): number[] {
-  return Array.from(new Set(lists.flat())).sort((a, b) => a - b);
-}
-
-function trackTimesForBone(set: MotionTrackSet, bone: BoneName): number[] {
-  const tracks = set.get(bone);
-  if (tracks == null) return [];
-  return mergeKeyTimes(
-    tracks.translation == null ? [] : Array.from(tracks.translation.times).map((time) => Math.round(time * 1000) / 1000),
-    tracks.rotation == null ? [] : Array.from(tracks.rotation.times).map((time) => Math.round(time * 1000) / 1000),
-  );
-}
-
-function formatBoneName(bone: BoneName): string {
-  return bone.replace(/([a-z])([A-Z])/g, '$1 $2').toUpperCase();
-}
-
-function renderKeyRow(
-  row: HTMLElement,
-  times: number[],
-  duration: number,
-  className: string,
-  muted = false,
-  provisionalTimes: Set<number> = new Set(),
-): void {
-  row.replaceChildren();
-  const limited = times.length > 600 ? times.filter((_, index) => index % Math.ceil(times.length / 600) === 0) : times;
-  limited.forEach((time) => {
-    const marker = document.createElement('span');
-    const provisional = provisionalTimes.has(Math.round(time * 1000) / 1000);
-    marker.className = `keyframe ${className}${muted ? ' muted' : ''}${provisional ? ' provisional' : ''}`;
-    marker.style.left = `${duration <= 0 ? 0 : (time / duration) * 100}%`;
-    marker.title = `${provisional ? 'PREVIEW · ' : ''}F ${formatFrame(time * (state.animation?.sourceFps ?? 30))} · ${formatSeconds(time)}`;
-    row.append(marker);
-  });
-}
-
-function updateTransformsExpansionUi(): void {
-  const expanded = state.transformsExpanded;
-  dom.transformBoneLabels.hidden = !expanded;
-  dom.transformBoneLanes.hidden = !expanded;
-  dom.trackLanes.classList.toggle('transforms-expanded', expanded);
-  dom.transformsToggle.setAttribute('aria-expanded', String(expanded));
-  dom.transformsToggle.title = expanded ? 'ボーン別の表示を折りたたむ' : 'ボーン別に展開';
-  dom.transformsToggle.setAttribute('aria-label', expanded ? 'Bonesのボーン別表示を折りたたむ' : 'Bonesをボーン別に展開');
-}
-
-function renderTransformBoneRows(
-  sourceTracks: MotionTrackSet,
-  outputTracks: MotionTrackSet,
-  duration: number,
-  isTuningPreview: boolean,
-  provisionalTimesFor: (sourceTimes: number[], outputTimes: number[]) => Set<number>,
-): void {
-  dom.transformBoneLabels.replaceChildren();
-  dom.transformBoneLanes.replaceChildren();
-  if (!state.transformsExpanded) return;
-
-  const bones = HUMAN_BONES.filter((bone) => (
-    trackTimesForBone(sourceTracks, bone).length > 0 || trackTimesForBone(outputTracks, bone).length > 0
-  ));
-  bones.forEach((bone) => {
-    const sourceTimes = trackTimesForBone(sourceTracks, bone);
-    const outputTimes = trackTimesForBone(outputTracks, bone);
-    const times = isTuningPreview ? mergeKeyTimes(sourceTimes, outputTimes) : outputTimes;
-    const sourceSet = sourceTracks.get(bone);
-    const outputSet = outputTracks.get(bone);
-    const hasTranslation = sourceSet?.translation != null || outputSet?.translation != null;
-    const hasRotation = sourceSet?.rotation != null || outputSet?.rotation != null;
-    const pathLabel = [hasTranslation ? 'POSITION' : '', hasRotation ? 'ROTATION' : '']
-      .filter((label) => label.length > 0)
-      .join(' + ');
-
-    const label = document.createElement('div');
-    label.className = 'track-label track-bone-label';
-    const color = document.createElement('span');
-    color.className = 'track-color transforms';
-    const name = document.createElement('span');
-    name.className = 'track-bone-name';
-    name.textContent = formatBoneName(bone);
-    const path = document.createElement('small');
-    path.textContent = pathLabel;
-    label.append(color, name, path);
-
-    const lane = document.createElement('div');
-    lane.className = 'track-lane track-bone-lane';
-    lane.dataset.bone = bone;
-    const row = document.createElement('div');
-    row.className = 'key-row';
-    lane.append(row);
-    dom.transformBoneLabels.append(label);
-    dom.transformBoneLanes.append(lane);
-    renderKeyRow(row, times, duration, 'transforms', false, provisionalTimesFor(sourceTimes, outputTimes));
-  });
-}
-
-function getTimelinePixelsPerSecond(duration: number): number {
-  if (state.timelinePixelsPerSecond == null) {
-    const availableWidth = dom.timelineScroll.clientWidth;
-    state.timelinePixelsPerSecond = availableWidth > 0
-      ? availableWidth / Math.max(0.001, duration)
-      : DEFAULT_TIMELINE_PIXELS_PER_SECOND;
-  }
-  return state.timelinePixelsPerSecond;
-}
-
-function updateStickyTimelineRuler(): void {
-  const bodyRect = dom.timelineBody.getBoundingClientRect();
-  const scrollRect = dom.timelineScroll.getBoundingClientRect();
-  dom.timelineRulerSticky.style.left = `${Math.round(scrollRect.left)}px`;
-  dom.timelineRulerSticky.style.top = `${Math.round(bodyRect.top)}px`;
-  dom.timelineRulerSticky.style.width = `${Math.round(scrollRect.width)}px`;
-  const ruler = dom.timelineRuler.cloneNode(true) as HTMLElement;
-  ruler.removeAttribute('id');
-  ruler.style.left = `${TIMELINE_EDGE_PADDING}px`;
-  ruler.style.width = `${Math.round(dom.timelineRuler.getBoundingClientRect().width)}px`;
-  ruler.style.transform = `translateX(-${dom.timelineScroll.scrollLeft}px)`;
-  dom.timelineRulerSticky.replaceChildren(ruler);
-}
-
-function renderTimeline(): void {
-  updateTransformsExpansionUi();
-  if (state.animation == null) {
-    dom.transformsKeys.replaceChildren();
-    dom.transformBoneLabels.replaceChildren();
-    dom.transformBoneLanes.replaceChildren();
-    dom.faceKeys.replaceChildren();
-    dom.timelineRuler.replaceChildren();
-    dom.timelineRulerSticky.replaceChildren();
-    updatePlayhead();
-    return;
-  }
-  const { duration, tracks } = state.animation;
-  const motionTimes = uniqueKeyTimes(tracks);
-  const expressionTimes = uniqueExpressionKeyTimes(state.animation.expressionTracks);
-  const isBakePreview = state.animation.bakePreview != null;
-  const isTuningPreview = isBakePreview;
-  const sourceTracks = state.animation.sourceTracks;
-  const sourceMotionTimes = uniqueKeyTimes(sourceTracks);
-  const sourceExpressionTimes = uniqueExpressionKeyTimes(state.animation.sourceExpressionTracks);
-  const transformsSourceTimes = mergeKeyTimes(
-    laneTimes(sourceTracks, ['translation']),
-    laneTimes(sourceTracks, ['rotation']),
-  );
-  const transformsOutputTimes = mergeKeyTimes(
-    laneTimes(tracks, ['translation']),
-    laneTimes(tracks, ['rotation']),
-  );
-  const provisionalTimesFor = (sourceTimes: number[], outputTimes: number[]): Set<number> => {
-    if (isBakePreview) return new Set([
-      ...sourceTimes.filter((time) => !outputTimes.includes(time)),
-      ...outputTimes.filter((time) => !sourceTimes.includes(time)),
-    ]);
-    return new Set<number>();
-  };
-  const transformsTimes = isTuningPreview
-    ? mergeKeyTimes(transformsSourceTimes, transformsOutputTimes)
-    : transformsOutputTimes;
-  const faceOutputTimes = state.animation.source === 'preview' ? motionTimes.filter((_, index) => index % 2 === 0) : expressionTimes;
-  const faceSourceTimes = state.animation.source === 'preview'
-    ? sourceMotionTimes.filter((_, index) => index % 2 === 0)
-    : sourceExpressionTimes;
-  const faceTimes = isTuningPreview ? mergeKeyTimes(faceSourceTimes, faceOutputTimes) : faceOutputTimes;
-  renderKeyRow(
-    dom.transformsKeys,
-    transformsTimes,
-    duration,
-    'transforms',
-    false,
-    provisionalTimesFor(transformsSourceTimes, transformsOutputTimes),
-  );
-  renderTransformBoneRows(sourceTracks, tracks, duration, isTuningPreview, provisionalTimesFor);
-  renderKeyRow(dom.faceKeys, faceTimes, duration, 'face', true, provisionalTimesFor(faceSourceTimes, faceOutputTimes));
-  const fps = Math.max(1, state.animation.sourceFps);
-  const totalFrames = Math.max(1, Math.round(duration * fps));
-  dom.timelineRuler.replaceChildren();
-  const frameStep = `${100 / totalFrames}%`;
-  const secondStep = `${duration <= 0 ? 100 : (1 / duration) * 100}%`;
-  dom.timelineRuler.style.setProperty('--frame-step', frameStep);
-  dom.timelineRuler.style.setProperty('--second-step', secondStep);
-  dom.trackLanes.style.setProperty('--frame-step', frameStep);
-  dom.trackLanes.style.setProperty('--second-step', secondStep);
-  const pixelsPerSecond = getTimelinePixelsPerSecond(duration);
-  const trackWidth = Math.max(1, duration * pixelsPerSecond * state.zoom);
-  dom.timelineScrollContent.style.width = `${trackWidth + TIMELINE_EDGE_PADDING * 2}px`;
-  dom.timelineRuler.style.width = '100%';
-  dom.trackLanes.style.width = '100%';
-  const timeRow = document.createElement('div');
-  timeRow.className = 'ruler-row ruler-time-row';
-  const secondCount = Math.floor(duration + 0.0001);
-  for (let second = 0; second <= secondCount; second += 1) {
-    const time = second;
-    const mark = document.createElement('span');
-    mark.className = 'ruler-mark';
-    mark.style.left = `${duration <= 0 ? 0 : (time / duration) * 100}%`;
-    mark.textContent = formatTimelineSecond(time);
-    timeRow.append(mark);
-  }
-  if (duration - secondCount > 0.0001) {
-    const mark = document.createElement('span');
-    mark.className = 'ruler-mark ruler-final-time-mark';
-    mark.style.left = '100%';
-    mark.textContent = formatTimelineSecond(duration);
-    timeRow.append(mark);
-  }
-  dom.timelineRuler.append(timeRow);
-  const frameRow = document.createElement('div');
-  frameRow.className = 'ruler-row ruler-frame-row';
-  for (let frame = 0; frame <= totalFrames; frame += 10) {
-    const mark = document.createElement('span');
-    mark.className = 'ruler-mark';
-    mark.style.left = `${(frame / totalFrames) * 100}%`;
-    mark.textContent = `F ${formatFrame(frame)}`;
-    frameRow.append(mark);
-  }
-  if (totalFrames % 10 !== 0) {
-    const mark = document.createElement('span');
-    mark.className = 'ruler-mark';
-    mark.style.left = '100%';
-    mark.textContent = `F ${formatFrame(totalFrames)}`;
-    frameRow.append(mark);
-  }
-  dom.timelineRuler.append(frameRow);
-  updateStickyTimelineRuler();
-  updatePlayhead();
-}
-
-function updatePlayhead(): void {
-  const duration = state.animation?.duration ?? 1;
-  const fps = Math.max(1, state.animation?.sourceFps ?? 30);
-  const displayTime = snapTimeToFrame(state.time);
-  const percent = clamp((displayTime / duration) * 100, 0, 100);
-  dom.playhead.style.left = `${percent}%`;
-  const frame = Math.round(displayTime * fps);
-  dom.currentFrame.textContent = `F ${formatFrame(frame)}`;
-  dom.totalFrames.textContent = formatFrame(Math.round(duration * fps));
-  dom.currentTime.textContent = formatSeconds(displayTime);
-}
-
-function centerTimelineOnPlayhead(): void {
-  const playheadRect = dom.playhead.getBoundingClientRect();
-  const timelineRect = dom.timelineScroll.getBoundingClientRect();
-  const currentScrollLeft = dom.timelineScroll.scrollLeft;
-  const nextScrollLeft = getTimelineScrollLeftForPlayhead({
-    currentScrollLeft,
-    playheadCenter: playheadRect.left + playheadRect.width / 2,
-    viewportLeft: timelineRect.left,
-    viewportWidth: dom.timelineScroll.clientWidth,
-    maxScrollLeft: Math.max(0, dom.timelineScroll.scrollWidth - dom.timelineScroll.clientWidth),
-  });
-  if (nextScrollLeft !== currentScrollLeft) dom.timelineScroll.scrollLeft = nextScrollLeft;
-}
-
-function snapTimeToFrame(time: number): number {
-  const animation = state.animation;
-  if (animation == null) return time;
-  const fps = Math.max(1, animation.sourceFps);
-  return clamp(Math.round(time * fps) / fps, 0, animation.duration);
-}
 
 function updateInterface(): void {
   const model = state.model;
@@ -1348,7 +724,7 @@ function updateInterface(): void {
   dom.bakeFrameStepNumber.value = state.bakeFrameStep.toString();
   dom.bakeFrameMidLabel.textContent = `${Math.ceil(maxFrameStep / 2)}`;
   dom.bakeFrameMaxLabel.textContent = `${maxFrameStep}`;
-  updatePlayhead();
+  timeline.updatePlayhead();
 }
 
 function setPlayState(playing: boolean): void {
@@ -1360,7 +736,8 @@ function setPlayState(playing: boolean): void {
 
 function seekTo(time: number): void {
   if (state.animation == null) return;
-  state.time = snapTimeToFrame(clamp(time, 0, state.animation.duration));
+  const fps = Math.max(1, state.animation.sourceFps);
+  state.time = clamp(Math.round(time * fps) / fps, 0, state.animation.duration);
   if (state.mixer != null) {
     // setTime() still evaluates the action, so temporarily clear paused while
     // seeking. Otherwise a paused timeline click would keep the pose at frame 0.
@@ -1369,19 +746,11 @@ function seekTo(time: number): void {
     if (state.action != null) state.action.paused = !state.isPlaying;
   }
   if (state.model?.vrm != null) state.model.vrm.update(0);
-  updatePlayhead();
-}
-
-function seekFromPointer(clientX: number): void {
-  if (state.animation == null) return;
-  const trackRect = dom.trackLanes.getBoundingClientRect();
-  const width = Math.max(1, trackRect.width);
-  const localX = clientX - trackRect.left;
-  seekTo(clamp(localX / width, 0, 1) * state.animation.duration);
+  timeline.updatePlayhead();
 }
 
 function resetView(): void {
-  fitCameraToModel();
+  stage.fitCameraToModel(state.model);
   showToast('ビューをリセットしました');
 }
 
@@ -1431,12 +800,12 @@ function installPreview(): void {
   rebuildAction();
   setPlayState(state.isPlaying);
   renderAnimationList();
-  renderTimeline();
+  timeline.render();
   updateInterface();
 }
 
 function bindEvents(): void {
-  setViewportBackground('dark');
+  stage.setViewportBackground('dark');
   dom.modelDrop.addEventListener('click', () => dom.modelInput.click());
   dom.animationDrop.addEventListener('click', () => dom.animationInput.click());
   dom.modelInput.addEventListener('change', () => handleFileInput(dom.modelInput, (file) => {
@@ -1476,7 +845,7 @@ function bindEvents(): void {
   dom.play.addEventListener('click', () => {
     const playing = !state.isPlaying;
     setPlayState(playing);
-    if (!playing) centerTimelineOnPlayhead();
+    if (!playing) timeline.centerOnPlayhead();
   });
   dom.previousFrame.addEventListener('click', () => seekTo(Math.max(0, state.time - 1 / (state.animation?.sourceFps ?? 30))));
   dom.nextFrame.addEventListener('click', () => seekTo(Math.min(state.animation?.duration ?? 0, state.time + 1 / (state.animation?.sourceFps ?? 30))));
@@ -1486,21 +855,15 @@ function bindEvents(): void {
     state.speedMultiplier = multiplier;
     applySpeed();
   });
-  dom.viewportBackgroundButton.addEventListener('click', toggleViewportBackground);
+  dom.viewportBackgroundButton.addEventListener('click', stage.toggleViewportBackground);
   dom.resetView.addEventListener('click', resetView);
-  dom.viewportZoomOutButton.addEventListener('click', zoomViewportOut);
-  dom.viewportZoomButton.addEventListener('click', zoomViewportIn);
-  dom.viewportZoomRange.addEventListener('input', () => setViewportZoom(Number(dom.viewportZoomRange.value)));
+  dom.viewportZoomOutButton.addEventListener('click', stage.zoomViewportOut);
+  dom.viewportZoomButton.addEventListener('click', stage.zoomViewportIn);
+  dom.viewportZoomRange.addEventListener('input', () => stage.setViewportZoom(Number(dom.viewportZoomRange.value)));
   dom.transformsToggle.addEventListener('click', () => {
     state.transformsExpanded = !state.transformsExpanded;
-    renderTimeline();
+    timeline.render();
   });
-  dom.timelineBody.addEventListener('scroll', () => {
-    updateStickyTimelineRuler();
-  }, { passive: true });
-  dom.timelineScroll.addEventListener('scroll', () => {
-    updateStickyTimelineRuler();
-  }, { passive: true });
   dom.viewport.addEventListener('contextmenu', (event) => event.preventDefault());
   // OrbitControls normally consumes wheel events for dolly. Keep pinch-to-zoom,
   // but let wheel events retain their browser default and do nothing to the camera.
@@ -1529,8 +892,8 @@ function bindEvents(): void {
   dom.bakeApply.addEventListener('click', applyBake);
   dom.bakeCancel.addEventListener('click', cancelBake);
   dom.bakeRevert.addEventListener('click', revertBake);
-  dom.zoomIn.addEventListener('click', () => { state.zoom = clamp(state.zoom + 0.25, 1, 3); renderTimeline(); });
-  dom.zoomOut.addEventListener('click', () => { state.zoom = clamp(state.zoom - 0.25, 1, 3); renderTimeline(); });
+  dom.zoomIn.addEventListener('click', () => { state.zoom = clamp(state.zoom + 0.25, 1, 3); timeline.render(); });
+  dom.zoomOut.addEventListener('click', () => { state.zoom = clamp(state.zoom - 0.25, 1, 3); timeline.render(); });
 
   let seeking = false;
   let seekingPointerX = 0;
@@ -1568,7 +931,8 @@ function bindEvents(): void {
         const nextScrollLeft = clamp(dom.timelineScroll.scrollLeft + scrollDelta, 0, maxScrollLeft);
         if (nextScrollLeft !== dom.timelineScroll.scrollLeft) {
           dom.timelineScroll.scrollLeft = nextScrollLeft;
-          seekFromPointer(seekingPointerX);
+          const time = timeline.getTimeAtPointer(seekingPointerX);
+          if (time != null) seekTo(time);
         }
       }
     }
@@ -1598,13 +962,15 @@ function bindEvents(): void {
     seeking = true;
     seekingPointerX = event.clientX;
     dom.timelineScroll.setPointerCapture(event.pointerId);
-    seekFromPointer(event.clientX);
+    const time = timeline.getTimeAtPointer(event.clientX);
+    if (time != null) seekTo(time);
     startTimelineAutoScroll();
   });
   dom.timelineScroll.addEventListener('pointermove', (event) => {
     if (!seeking) return;
     seekingPointerX = event.clientX;
-    seekFromPointer(event.clientX);
+    const time = timeline.getTimeAtPointer(event.clientX);
+    if (time != null) seekTo(time);
   });
   const stopSeeking = (): void => {
     seeking = false;
@@ -1613,34 +979,23 @@ function bindEvents(): void {
   dom.timelineScroll.addEventListener('pointerup', stopSeeking);
   dom.timelineScroll.addEventListener('pointercancel', stopSeeking);
   dom.timelineScroll.addEventListener('lostpointercapture', stopSeeking);
-  window.addEventListener('resize', resizeRenderer);
-  window.addEventListener('resize', updateStickyTimelineRuler);
-}
-
-function resizeRenderer(): void {
-  const rect = dom.viewportShell.getBoundingClientRect();
-  const width = Math.max(1, rect.width);
-  const height = Math.max(1, rect.height);
-  renderer.setSize(width, height, false);
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
+  window.addEventListener('resize', stage.resize);
 }
 
 function animate(): void {
   requestAnimationFrame(animate);
   const delta = Math.min(0.05, clock.getDelta());
-  controls.update();
   if (state.animation != null && state.isPlaying && state.mixer != null) {
     state.time += delta;
     if (state.time > state.animation.duration) state.time %= state.animation.duration;
     state.mixer.setTime(state.time);
   }
   if (state.model?.vrm != null) state.model.vrm.update(delta);
-  renderer.render(scene, camera);
+  stage.render();
   mmdPreview.update(delta);
   if (performance.now() - state.lastUiUpdate > 40) {
     state.lastUiUpdate = performance.now();
-    updatePlayhead();
+    timeline.updatePlayhead();
   }
 }
 
@@ -1651,7 +1006,7 @@ async function bootstrap(): Promise<void> {
     timelineBody: dom.timelineBody,
     timelineScroll: dom.timelineScroll,
   });
-  resizeRenderer();
+  stage.resize();
   installPreview();
   animate();
   try {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import type { AnimationState, BoneName, MotionTrackSet } from './types.ts';
+import type { AnimationState, BoneName, MotionTrackSet } from './types.js';
 import {
   cloneExpressionTrackSet,
   cloneTrackSet,

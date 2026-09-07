@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import type { VRM } from '@pixiv/three-vrm';
 
-import type { RetargetedMotion } from './mixamoParser.ts';
+import type { RetargetedMotion } from './mixamoParser.js';
 import { getSourceTrackBoneName, mapSourceBone, trackPathFor } from './rigMapping.ts';
 import { makeContinuousQuaternionTrack, makeVectorTrack, setTrack } from './trackUtils.ts';
-import type { MotionTrackSet } from './types.ts';
+import type { MotionTrackSet } from './types.js';
 
 export function isDazFriendlyBvh(skeleton: THREE.Skeleton): boolean {
   const names = new Set(skeleton.bones.map((bone) => bone.name.toLowerCase()));

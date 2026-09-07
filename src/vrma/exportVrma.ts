@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import { HUMAN_BONES } from '../animation/rigMapping.ts';
-import type { AnimationState, BoneName, TrackPath } from '../animation/types.ts';
+import type { AnimationState, BoneName, TrackPath } from '../animation/types.js';
 
 export type VrmaExportAnimation = Pick<
   AnimationState,

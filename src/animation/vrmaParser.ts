@@ -3,7 +3,7 @@ import type { VRMAnimation } from '@pixiv/three-vrm-animation';
 
 import { HUMAN_BONES } from './rigMapping.ts';
 import { cloneExpressionTrackSet, setTrack } from './trackUtils.ts';
-import type { BoneName, ExpressionTrackSet, MotionTrackSet } from './types.ts';
+import type { BoneName, ExpressionTrackSet, MotionTrackSet } from './types.js';
 
 export function tracksFromVrma(animation: VRMAnimation): {
   tracks: MotionTrackSet;
