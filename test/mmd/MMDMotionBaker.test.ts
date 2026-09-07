@@ -36,3 +36,26 @@ test('samples every PMX bone after the helper has applied its resolved pose', ()
   ).dot(resolved)) > 0.999);
   assert.ok(childResult.restWorldRotation.equals(new THREE.Quaternion()));
 });
+
+test('extracts VMD morph tracks with their PMX morph names', () => {
+  const root = new THREE.Bone();
+  root.name = 'センター';
+  const mesh = new THREE.SkinnedMesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial());
+  mesh.add(root);
+  mesh.bind(new THREE.Skeleton([root]));
+  mesh.morphTargetDictionary = { まばたき: 0 };
+  mesh.morphTargetInfluences = [0];
+  const animation = new THREE.AnimationClip('mmd', 0.5, [
+    new THREE.NumberKeyframeTrack('.morphTargetInfluences[0]', [0, 0.5], [0.25, 0.75]),
+  ]);
+  const helper = { add: () => undefined, update: () => undefined };
+
+  const result = bakeLoadedMmdMotion(mesh, animation, helper, { fps: 30 });
+
+  assert.ok(Array.isArray(result.expressionTracks));
+  if (!Array.isArray(result.expressionTracks)) return;
+  assert.equal(result.expressionTracks.length, 1);
+  assert.equal(result.expressionTracks[0]!.name, 'まばたき');
+  assert.deepEqual(Array.from(result.expressionTracks[0]!.weight.times), [0, 0.5]);
+  assert.deepEqual(Array.from(result.expressionTracks[0]!.weight.values), [0.25, 0.75]);
+});

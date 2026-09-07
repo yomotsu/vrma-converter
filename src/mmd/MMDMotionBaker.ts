@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 
 import { continuousQuaternionValues, createMmdFrameTimes } from './MMDMotionMath.ts';
-import type { MMDMotionBakeResult, MMDMotionBoneTrack } from './MMDMotionTypes.js';
+import type {
+  MMDMotionBakeResult,
+  MMDMotionBoneTrack,
+  MMDMotionExpressionTrack,
+} from './MMDMotionTypes.js';
 
 export type MMDAnimationHelperLike = {
   add(mesh: THREE.SkinnedMesh, params: { animation: THREE.AnimationClip; physics: false }): unknown;
@@ -44,6 +48,35 @@ function disposeMmdMesh(mesh: THREE.SkinnedMesh): void {
   mesh.skeleton?.dispose();
 }
 
+function extractMmdExpressionTracks(
+  mesh: THREE.SkinnedMesh,
+  animation: THREE.AnimationClip,
+): MMDMotionExpressionTrack[] {
+  const morphNamesByIndex = new Map<number, string>();
+  Object.entries(mesh.morphTargetDictionary ?? {}).forEach(([name, index]) => {
+    morphNamesByIndex.set(index, name);
+  });
+
+  const expressionTracks: MMDMotionExpressionTrack[] = [];
+  for (const source of animation.tracks) {
+    if (!(source instanceof THREE.NumberKeyframeTrack)) continue;
+    const match = source.name.match(/^\.morphTargetInfluences\[(\d+)\]$/);
+    if (match == null) continue;
+    const index = Number(match[1]);
+    const name = morphNamesByIndex.get(index);
+    if (name == null) continue;
+
+    const weight = new THREE.NumberKeyframeTrack(
+      `${name}.weight`,
+      Array.from(source.times),
+      Array.from(source.values),
+    );
+    weight.setInterpolation(source.getInterpolation());
+    expressionTracks.push({ index, name, weight });
+  }
+  return expressionTracks;
+}
+
 export function bakeLoadedMmdMotion(
   mesh: THREE.SkinnedMesh,
   animation: THREE.AnimationClip,
@@ -65,6 +98,7 @@ export function bakeLoadedMmdMotion(
   const rotationValues = bones.map(() => [] as number[]);
   const worldRotationValues = bones.map(() => [] as number[]);
   const worldPositionValues = bones.map(() => [] as number[]);
+  const expressionTracks = extractMmdExpressionTracks(mesh, animation);
   const times = createMmdFrameTimes(animation.duration, fps);
   let previousTime = 0;
 
@@ -113,6 +147,7 @@ export function bakeLoadedMmdMotion(
     fps,
     times,
     bones: motionBones,
+    expressionTracks,
   };
 }
 
@@ -162,7 +197,10 @@ export class MMDMotionBaker {
       const hasBoneAnimation = loaded.animation.tracks.some((track) => (
         track.name.includes('.bones[') && track.name.endsWith('.quaternion')
       ));
-      if (!hasBoneAnimation) throw new Error('VMDに有効なボーンモーションがありません');
+      const hasExpressionAnimation = extractMmdExpressionTracks(loaded.mesh, loaded.animation).length > 0;
+      if (!hasBoneAnimation && !hasExpressionAnimation) {
+        throw new Error('VMDに有効なボーンまたは表情モーションがありません');
+      }
 
       helper = new MMDAnimationHelper({ sync: false, pmxAnimation: true });
       return bakeLoadedMmdMotion(loaded.mesh, loaded.animation, helper, { fps: this.fps });

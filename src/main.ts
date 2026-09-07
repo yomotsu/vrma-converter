@@ -74,6 +74,7 @@ type BoneName =
 type TrackPath = 'rotation' | 'translation';
 type MotionTrackSet = Map<BoneName, Partial<Record<TrackPath, THREE.KeyframeTrack>>>;
 type ExpressionTrackSet = VRMAnimation['expressionTracks'];
+type ExpressionPresetName = Parameters<ExpressionTrackSet['preset']['set']>[0];
 type BakeSettings = { fps: number; frameStep: number };
 
 const MIN_BAKE_FPS = 1;
@@ -1567,8 +1568,18 @@ function loadedClipFromMmdBake(result: MMDMotionBakeResult, targetVrm: VRM | nul
   const available = targetVrm == null
     ? undefined
     : new Set(HUMAN_BONES.filter((bone) => targetVrm.humanoid.getNormalizedBoneNode(bone as never) != null));
-  const retargeted = retargetMmdMotion(result, available);
+  const expressionManager = targetVrm?.expressionManager;
+  const availableExpressions = targetVrm == null
+    ? undefined
+    : expressionManager == null
+      ? { preset: new Set<string>(), custom: new Set<string>() }
+      : {
+        preset: new Set(Object.keys(expressionManager.presetExpressionMap)),
+        custom: new Set(Object.keys(expressionManager.customExpressionMap)),
+      };
+  const retargeted = retargetMmdMotion(result, available, availableExpressions);
   const tracks: MotionTrackSet = new Map();
+  const expressionTracks = emptyExpressionTrackSet();
 
   retargeted.rotationTracks.forEach((track, boneName) => {
     if (HUMAN_BONES.includes(boneName as BoneName)) {
@@ -1578,16 +1589,22 @@ function loadedClipFromMmdBake(result: MMDMotionBakeResult, targetVrm: VRM | nul
   if (retargeted.translationTrack != null && tracks.has('hips')) {
     setTrack(tracks, 'hips', 'translation', retargeted.translationTrack);
   }
+  retargeted.expressionTracks.preset.forEach((track, name) => {
+    expressionTracks.preset.set(name as ExpressionPresetName, track);
+  });
+  retargeted.expressionTracks.custom.forEach((track, name) => {
+    expressionTracks.custom.set(name, track);
+  });
 
   return {
     tracks,
-    expressionTracks: emptyExpressionTrackSet(),
+    expressionTracks,
     lookAtTrack: null,
     duration: result.duration,
     sourceFps: result.fps,
     restHipsY: retargeted.restHipsY,
     clipName: 'MMD Motion',
-    compatible: tracks.size > 0,
+    compatible: tracks.size > 0 || expressionTracks.preset.size > 0 || expressionTracks.custom.size > 0,
   };
 }
 
@@ -1778,7 +1795,7 @@ function renderAnimationList(): void {
     const name = document.createElement('strong');
     name.textContent = animation.clipName;
     const meta = document.createElement('small');
-    const derivedMeta = animation.derivedFrom === 'VMD' ? ' · IK BAKED' : '';
+    const derivedMeta = animation.derivedFrom === 'VMD' ? ' · IK + FACE BAKED' : '';
     meta.textContent = animation.source === 'preview'
       ? 'PREVIEW · 2.40 SEC'
       : `${formatClipMeta(animation)}${derivedMeta}${animation.compatible ? '' : ' · UNMAPPED'}`;
@@ -1882,13 +1899,13 @@ async function handleAnimationFile(file: File): Promise<void> {
       const baked = await mmdBaker.bakeVmd(file);
       if (request !== animationRequestSequence) return;
       const loaded = loadedClipFromMmdBake(baked, state.model?.vrm ?? null);
-      if (!loaded.compatible) throw new Error('VMDから対応する humanoid ボーンを抽出できませんでした');
+      if (!loaded.compatible) throw new Error('VMDから対応するボーンまたは表情を抽出できませんでした');
       loaded.clipName = withoutExtension(file.name);
       addLoadedAnimationClips(file, [loaded], 'VRMA', 'VMD');
-      showToast(`${file.name} をIKベイクしてVRMA化しました`);
+      showToast(`${file.name} をIK・表情変換してVRMA化しました`);
     } catch (error) {
       if (request === animationRequestSequence) {
-        showToast(error instanceof Error ? error.message : 'VMDのIKベイクに失敗しました');
+        showToast(error instanceof Error ? error.message : 'VMDのIK・表情変換に失敗しました');
       }
     } finally {
       if (request === animationRequestSequence) setLoading(false);

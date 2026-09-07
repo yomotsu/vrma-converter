@@ -53,6 +53,7 @@ test('composes center, groove, and lower-body rotations into hips', () => {
       bone(1, 'グルーブ', groove, new THREE.Vector3(0, 8, 0)),
       bone(2, '下半身', lower, new THREE.Vector3(0, 8, 0)),
     ],
+    expressionTracks: [],
   };
   const motion = retargetMmdMotion(result, new Set(['hips']));
   const actual = new THREE.Quaternion().fromArray(
@@ -71,6 +72,7 @@ test('extracts center movement as normalized hips translation', () => {
       ...bone(0, 'センター', new THREE.Quaternion(), new THREE.Vector3(0, 8, 0)),
       worldPosition: new THREE.VectorKeyframeTrack('センター', [0, 1], [0, 8, 0, 1, 9, -2]),
     }],
+    expressionTracks: [],
   };
   const motion = retargetMmdMotion(result, new Set(['hips']));
   assert.deepEqual(Array.from(motion.translationTrack!.values), [0, 8, 0, 1, 9, -2]);
@@ -83,6 +85,7 @@ test('does not output humanoid tracks absent from the target VRM', () => {
     fps: 30,
     times: [0],
     bones: [bone(0, '頭', new THREE.Quaternion(), new THREE.Vector3())],
+    expressionTracks: [],
   };
   const motion = retargetMmdMotion(result, new Set(['hips']));
   assert.equal(motion.rotationTracks.has('head'), false);
@@ -94,6 +97,7 @@ test('returns a VRMA-ready rotation track for a mapped VMD bone', () => {
     fps: 30,
     times: [0],
     bones: [bone(0, '左腕', new THREE.Quaternion(), new THREE.Vector3())],
+    expressionTracks: [],
   };
   const motion = retargetMmdMotion(result, new Set(['leftUpperArm']));
   assert.equal(motion.rotationTracks.get('leftUpperArm')?.getValueSize(), 4);
@@ -121,6 +125,7 @@ test('converts an MMD sibling upper-body rotation into VRM spine-local rotation'
       withWorldPose(bone(1, '下半身', hipsWorld, new THREE.Vector3(0, 8, 0)), 0, hipsWorld),
       withWorldPose(bone(2, '上半身', upperBodyWorld, new THREE.Vector3(0, 8, 0)), 0, upperBodyWorld),
     ],
+    expressionTracks: [],
   };
 
   const motion = retargetMmdMotion(result, new Set(['hips', 'spine']));
@@ -129,4 +134,34 @@ test('converts an MMD sibling upper-body rotation into VRM spine-local rotation'
   );
   const expected = hipsWorld.clone().invert().multiply(upperBodyWorld).normalize();
   assert.ok(1 - Math.abs(actual.dot(expected)) < 1e-6);
+});
+
+test('retargets MMD facial morphs to available VRM expression presets', () => {
+  const result: MMDMotionBakeResult = {
+    duration: 1,
+    fps: 30,
+    times: [0],
+    bones: [bone(0, 'センター', new THREE.Quaternion(), new THREE.Vector3())],
+    expressionTracks: [
+      {
+        index: 0,
+        name: 'まばたき',
+        weight: new THREE.NumberKeyframeTrack('まばたき.weight', [0, 1], [0, 1]),
+      },
+      {
+        index: 1,
+        name: '未対応モーフ',
+        weight: new THREE.NumberKeyframeTrack('未対応モーフ.weight', [0, 1], [0, 1]),
+      },
+    ],
+  };
+
+  const motion = retargetMmdMotion(
+    result,
+    undefined,
+    { preset: new Set(['blink']), custom: new Set() },
+  );
+  assert.deepEqual(Array.from(motion.expressionTracks?.preset.keys() ?? []), ['blink']);
+  assert.deepEqual(Array.from(motion.expressionTracks?.preset.get('blink')?.values ?? []), [0, 1]);
+  assert.equal(motion.expressionTracks?.custom.size, 0);
 });

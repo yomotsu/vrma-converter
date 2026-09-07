@@ -12,9 +12,16 @@ export type MMDMotionBoneTrack = {
   restWorldPosition: THREE.Vector3;
 };
 
+export type MMDMotionExpressionTrack = {
+  index: number;
+  name: string;
+  weight: THREE.NumberKeyframeTrack;
+};
+
 export type MMDMotionBakeResult = {
   duration: number;
   fps: number;
   times: number[];
   bones: MMDMotionBoneTrack[];
+  expressionTracks: MMDMotionExpressionTrack[];
 };

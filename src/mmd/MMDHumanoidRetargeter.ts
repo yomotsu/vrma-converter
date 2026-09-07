@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 
 import { continuousQuaternionValues } from './MMDMotionMath.ts';
+import { retargetMmdExpressions } from './MMDExpressionRetargeter.ts';
+import type { MMDExpressionAvailability, MMDExpressionMotion } from './MMDExpressionRetargeter.ts';
 import type { MMDMotionBakeResult, MMDMotionBoneTrack } from './MMDMotionTypes.js';
 
 export type MMDHumanoidMotion = {
   rotationTracks: Map<string, THREE.QuaternionKeyframeTrack>;
   translationTrack: THREE.VectorKeyframeTrack | null;
+  expressionTracks: MMDExpressionMotion;
   restHipsY: number;
 };
 
@@ -217,6 +220,7 @@ function canOutputBone(availableHumanoidNames: ReadonlySet<string> | undefined, 
 export function retargetMmdMotion(
   result: MMDMotionBakeResult,
   availableHumanoidNames?: ReadonlySet<string>,
+  availableExpressions?: MMDExpressionAvailability,
 ): MMDHumanoidMotion {
   const times = result.times.length > 0 ? result.times : [0];
   const rotationTracks = new Map<string, THREE.QuaternionKeyframeTrack>();
@@ -264,5 +268,10 @@ export function retargetMmdMotion(
     rotationTracks.set(targetName, createQuaternionTrack(targetName, times, quaternions));
   }
 
-  return { rotationTracks, translationTrack, restHipsY };
+  return {
+    rotationTracks,
+    translationTrack,
+    expressionTracks: retargetMmdExpressions(result, availableExpressions),
+    restHipsY,
+  };
 }
