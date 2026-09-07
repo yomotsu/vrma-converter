@@ -19,6 +19,7 @@ import {
   retargetMmdMotion,
 } from './mmd/index.js';
 import type { MMDMotionBakeResult } from './mmd/index.js';
+import { getTimelineScrollLeftForPlayhead } from './timelineScroll.js';
 
 type BoneName =
   | 'hips'
@@ -2333,6 +2334,20 @@ function updatePlayhead(): void {
   dom.currentTime.textContent = formatSeconds(displayTime);
 }
 
+function centerTimelineOnPlayhead(): void {
+  const playheadRect = dom.playhead.getBoundingClientRect();
+  const timelineRect = dom.timelineScroll.getBoundingClientRect();
+  const currentScrollLeft = dom.timelineScroll.scrollLeft;
+  const nextScrollLeft = getTimelineScrollLeftForPlayhead({
+    currentScrollLeft,
+    playheadCenter: playheadRect.left + playheadRect.width / 2,
+    viewportLeft: timelineRect.left,
+    viewportWidth: dom.timelineScroll.clientWidth,
+    maxScrollLeft: Math.max(0, dom.timelineScroll.scrollWidth - dom.timelineScroll.clientWidth),
+  });
+  if (nextScrollLeft !== currentScrollLeft) dom.timelineScroll.scrollLeft = nextScrollLeft;
+}
+
 function snapTimeToFrame(time: number): number {
   const animation = state.animation;
   if (animation == null) return time;
@@ -2757,7 +2772,11 @@ function bindEvents(): void {
     }
   });
 
-  dom.play.addEventListener('click', () => setPlayState(!state.isPlaying));
+  dom.play.addEventListener('click', () => {
+    const playing = !state.isPlaying;
+    setPlayState(playing);
+    if (!playing) centerTimelineOnPlayhead();
+  });
   dom.previousFrame.addEventListener('click', () => seekTo(Math.max(0, state.time - 1 / (state.animation?.sourceFps ?? 30))));
   dom.nextFrame.addEventListener('click', () => seekTo(Math.min(state.animation?.duration ?? 0, state.time + 1 / (state.animation?.sourceFps ?? 30))));
   dom.speedMultiplier.addEventListener('input', () => {

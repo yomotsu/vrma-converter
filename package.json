@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node --test --experimental-strip-types test/mmd/*.test.ts"
+    "test": "node --test --experimental-strip-types test/mmd/*.test.ts test/timeline/*.test.ts"
   },
   "dependencies": {
     "@pixiv/three-vrm": "^3.5.3",
