@@ -1896,6 +1896,7 @@ async function handleAnimationFile(file: File): Promise<void> {
     return;
   }
   if (!['vrma', 'glb', 'gltf', 'fbx', 'bvh'].includes(extension)) {
+    setLoading(false);
     showToast('VRMA / GLB / GLTF / FBX / BVH / VMD を選択してください');
     return;
   }

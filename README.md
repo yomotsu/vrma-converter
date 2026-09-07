@@ -15,7 +15,8 @@ npm run dev
 
 - VRM を Avatar カードへドロップしてアバターを変更
 - `VRMA / GLB / GLTF / FBX / BVH` を Motion Source へドロップ
-- `VMD` を Motion Source へドロップすると VRMA 変換を行わず、`assets/mobuko.pmx` を右下の MMD オーバーレイで読み込んで再生
+- `VMD` を Motion Source へドロップすると、固定の `assets/mobuko.pmx` へ読み込み、MMD の IK／Grant を解決した全ボーン姿勢を30fpsでFKとしてベイクし、現在のVRM向け `VRMA` クリップとして一覧へ追加
+- VMDドロップ中は同じモーションを右下の256×256 MMDオーバーレイでも再生する。これはデバッグ専用で、VRM側のタイムライン、シーク、速度倍率とは独立している。将来のprodビルドではオーバーレイだけを削除できる構成
 - 複数クリップを含む FBX / GLB / GLTF はクリップごとに一覧へ追加し、一覧クリックで切り替え。ドロップ直後は 0 番目を再生
 - 一覧右端の `×` から不要なクリップを削除
 - 読み込み後に humanoid ボーンをリターゲットし、ループ再生
