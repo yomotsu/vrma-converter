@@ -222,7 +222,6 @@ export function createStage(stageDom: StageDom): StageController {
     });
   };
   setStageGridAppearance(false);
-  grid.position.y = 0.005;
   stageGroup.add(grid);
 
   const floorMaterial = new THREE.MeshBasicMaterial({
@@ -234,7 +233,7 @@ export function createStage(stageDom: StageDom): StageController {
   });
   const floor = new THREE.Mesh(new THREE.CircleGeometry(1, 80), floorMaterial);
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = 0.01;
+  floor.renderOrder = 1;
   floor.visible = false;
   stageGroup.add(floor);
 
@@ -243,7 +242,6 @@ export function createStage(stageDom: StageDom): StageController {
     new THREE.MeshBasicMaterial({ color: 0x53cfc8, opacity: 1, side: THREE.DoubleSide }),
   );
   floorRing.rotation.x = -Math.PI / 2;
-  floorRing.position.y = 0.015;
   floorRing.visible = false;
   stageGroup.add(floorRing);
 
@@ -294,11 +292,10 @@ export function createStage(stageDom: StageDom): StageController {
     const radius = STAGE_SHADOW_RADIUS;
     const centerX = (bounds.min.x + bounds.max.x) * 0.5;
     const centerZ = (bounds.min.z + bounds.max.z) * 0.5;
-    const groundY = bounds.min.y + Math.max(0.001, radius * 0.02);
     floor.scale.setScalar(radius);
-    floor.position.set(centerX, groundY, centerZ);
+    floor.position.set(centerX, 0, centerZ);
     floorRing.scale.setScalar(radius);
-    floorRing.position.set(centerX, groundY + Math.max(0.001, radius * 0.015), centerZ);
+    floorRing.position.set(centerX, 0, centerZ);
     floor.visible = true;
     floorRing.visible = true;
   }
