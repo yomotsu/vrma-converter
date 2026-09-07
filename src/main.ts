@@ -11,7 +11,8 @@ import { VRMAnimationLoaderPlugin, VRMLookAtQuaternionProxy } from '@pixiv/three
 import type { VRMAnimation } from '@pixiv/three-vrm-animation';
 import defaultVrmUrl from '../assets/model.vrm?url';
 import defaultMmdModelUrl from '../assets/mobuko.pmx?url';
-import { MMDPlayer } from './mmd/index.js';
+import { MMDMotionBaker, MMDPlayer, retargetMmdMotion } from './mmd/index.js';
+import type { MMDMotionBakeResult } from './mmd/index.js';
 
 type BoneName =
   | 'hips'
@@ -103,6 +104,7 @@ type AnimationState = {
   clipIndex: number;
   clipCount: number;
   format: string;
+  derivedFrom?: 'VMD';
   duration: number;
   sourceFps: number;
   restHipsY: number;
@@ -429,6 +431,7 @@ gltfLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 const fbxLoader = new FBXLoader();
 const bvhLoader = new BVHLoader();
 const mmdPlayer = new MMDPlayer(dom.overlayCanvas, { modelUrl: defaultMmdModelUrl });
+const mmdBaker = new MMDMotionBaker({ modelUrl: defaultMmdModelUrl, fps: 30 });
 
 const state: {
   model: ModelState | null;
@@ -1560,6 +1563,34 @@ type LoadedClip = {
   compatible: boolean;
 };
 
+function loadedClipFromMmdBake(result: MMDMotionBakeResult, targetVrm: VRM | null): LoadedClip {
+  const available = targetVrm == null
+    ? undefined
+    : new Set(HUMAN_BONES.filter((bone) => targetVrm.humanoid.getNormalizedBoneNode(bone as never) != null));
+  const retargeted = retargetMmdMotion(result, available);
+  const tracks: MotionTrackSet = new Map();
+
+  retargeted.rotationTracks.forEach((track, boneName) => {
+    if (HUMAN_BONES.includes(boneName as BoneName)) {
+      setTrack(tracks, boneName as BoneName, 'rotation', track);
+    }
+  });
+  if (retargeted.translationTrack != null && tracks.has('hips')) {
+    setTrack(tracks, 'hips', 'translation', retargeted.translationTrack);
+  }
+
+  return {
+    tracks,
+    expressionTracks: emptyExpressionTrackSet(),
+    lookAtTrack: null,
+    duration: result.duration,
+    sourceFps: result.fps,
+    restHipsY: retargeted.restHipsY,
+    clipName: 'MMD Motion',
+    compatible: tracks.size > 0,
+  };
+}
+
 function estimateFps(clip: THREE.AnimationClip, duration: number): number {
   const firstTrack = clip.tracks[0];
   if (firstTrack == null || duration <= 0) return 30;
@@ -1662,6 +1693,49 @@ async function parseAnimationFile(file: File, targetVrm: VRM | null): Promise<Lo
 }
 
 let animationSequence = 0;
+let animationRequestSequence = 0;
+
+function addLoadedAnimationClips(
+  file: File,
+  loadedClips: LoadedClip[],
+  format: string,
+  derivedFrom?: 'VMD',
+): AnimationState[] {
+  const clipCount = loadedClips.length;
+  const addedAnimations: AnimationState[] = loadedClips.map((loaded, index) => ({
+    id: `animation-${++animationSequence}`,
+    name: file.name,
+    displayName: withoutExtension(file.name),
+    clipName: loaded.clipName,
+    clipIndex: index,
+    clipCount,
+    format,
+    derivedFrom,
+    duration: Math.max(0.001, loaded.duration),
+    sourceFps: loaded.sourceFps,
+    restHipsY: loaded.restHipsY,
+    originalTracks: cloneTrackSet(loaded.tracks),
+    sourceTracks: cloneTrackSet(loaded.tracks),
+    tracks: cloneTrackSet(loaded.tracks),
+    originalExpressionTracks: cloneExpressionTrackSet(loaded.expressionTracks),
+    sourceExpressionTracks: cloneExpressionTrackSet(loaded.expressionTracks),
+    expressionTracks: cloneExpressionTrackSet(loaded.expressionTracks),
+    originalLookAtTrack: loaded.lookAtTrack?.clone() ?? null,
+    sourceLookAtTrack: loaded.lookAtTrack?.clone() ?? null,
+    lookAtTrack: loaded.lookAtTrack?.clone() ?? null,
+    source: 'file' as const,
+    compatible: loaded.compatible,
+    bakePreview: null,
+    bakeApplied: false,
+    originalDuration: Math.max(0.001, loaded.duration),
+    appliedSpeedMultiplier: 1,
+  }));
+
+  state.animations.push(...addedAnimations);
+  const firstAnimation = addedAnimations[0];
+  if (firstAnimation != null) selectAnimation(firstAnimation.id);
+  return addedAnimations;
+}
 
 function formatClipMeta(animation: AnimationState): string {
   const clipNumber = animation.clipCount > 1 ? ` · CLIP ${String(animation.clipIndex + 1).padStart(2, '0')}/${String(animation.clipCount).padStart(2, '0')}` : '';
@@ -1704,7 +1778,10 @@ function renderAnimationList(): void {
     const name = document.createElement('strong');
     name.textContent = animation.clipName;
     const meta = document.createElement('small');
-    meta.textContent = animation.source === 'preview' ? 'PREVIEW · 2.40 SEC' : `${formatClipMeta(animation)}${animation.compatible ? '' : ' · UNMAPPED'}`;
+    const derivedMeta = animation.derivedFrom === 'VMD' ? ' · IK BAKED' : '';
+    meta.textContent = animation.source === 'preview'
+      ? 'PREVIEW · 2.40 SEC'
+      : `${formatClipMeta(animation)}${derivedMeta}${animation.compatible ? '' : ' · UNMAPPED'}`;
     copy.append(name, meta);
     item.append(type, copy);
 
@@ -1790,14 +1867,31 @@ function removeAnimation(id: string): void {
 }
 
 async function handleAnimationFile(file: File): Promise<void> {
+  const request = ++animationRequestSequence;
   const extension = extensionOf(file.name);
   if (extension === 'vmd') {
+    void mmdPlayer.playVmd(file).then(() => {
+      if (request === animationRequestSequence) showToast(`${file.name} を MMD プレビューで再生しています`);
+    }).catch((error: unknown) => {
+      if (request === animationRequestSequence) {
+        showToast(error instanceof Error ? error.message : 'VMD の読み込みに失敗しました');
+      }
+    });
+    setLoading(true, 'BAKING MMD IK TO FK');
     try {
-      await mmdPlayer.playVmd(file);
-      showToast(`${file.name} を MMD プレビューで再生しています`);
+      const baked = await mmdBaker.bakeVmd(file);
+      if (request !== animationRequestSequence) return;
+      const loaded = loadedClipFromMmdBake(baked, state.model?.vrm ?? null);
+      if (!loaded.compatible) throw new Error('VMDから対応する humanoid ボーンを抽出できませんでした');
+      loaded.clipName = withoutExtension(file.name);
+      addLoadedAnimationClips(file, [loaded], 'VRMA', 'VMD');
+      showToast(`${file.name} をIKベイクしてVRMA化しました`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'VMD の読み込みに失敗しました';
-      showToast(message);
+      if (request === animationRequestSequence) {
+        showToast(error instanceof Error ? error.message : 'VMDのIKベイクに失敗しました');
+      }
+    } finally {
+      if (request === animationRequestSequence) setLoading(false);
     }
     return;
   }
@@ -1808,44 +1902,17 @@ async function handleAnimationFile(file: File): Promise<void> {
   setLoading(true, 'RETARGETING MOTION');
   try {
     const loadedClips = await parseAnimationFile(file, state.model?.vrm ?? null);
+    if (request !== animationRequestSequence) return;
     if (loadedClips.length === 0 || !loadedClips.some((clip) => clip.compatible)) throw new Error('対応する humanoid ボーンが見つかりませんでした');
-    const clipCount = loadedClips.length;
-    const addedAnimations = loadedClips.map((loaded, index) => ({
-      id: `animation-${++animationSequence}`,
-      name: file.name,
-      displayName: withoutExtension(file.name),
-      clipName: loaded.clipName,
-      clipIndex: index,
-      clipCount,
-      format: extension.toUpperCase(),
-      duration: Math.max(0.001, loaded.duration),
-      sourceFps: loaded.sourceFps,
-      restHipsY: loaded.restHipsY,
-      originalTracks: cloneTrackSet(loaded.tracks),
-      sourceTracks: cloneTrackSet(loaded.tracks),
-      tracks: cloneTrackSet(loaded.tracks),
-      originalExpressionTracks: cloneExpressionTrackSet(loaded.expressionTracks),
-      sourceExpressionTracks: cloneExpressionTrackSet(loaded.expressionTracks),
-      expressionTracks: cloneExpressionTrackSet(loaded.expressionTracks),
-      originalLookAtTrack: loaded.lookAtTrack?.clone() ?? null,
-      sourceLookAtTrack: loaded.lookAtTrack?.clone() ?? null,
-      lookAtTrack: loaded.lookAtTrack?.clone() ?? null,
-      source: 'file' as const,
-      compatible: loaded.compatible,
-      bakePreview: null,
-      bakeApplied: false,
-      originalDuration: Math.max(0.001, loaded.duration),
-      appliedSpeedMultiplier: 1,
-    }));
-    state.animations.push(...addedAnimations);
-    // The first clip in a dropped file is the automatic playback target.
-    selectAnimation(addedAnimations[0].id);
-    showToast(clipCount > 1 ? `${file.name} · ${clipCount} clips を追加しました` : `${file.name} をリターゲットしました`);
+    const addedAnimations = addLoadedAnimationClips(file, loadedClips, extension.toUpperCase());
+    showToast(addedAnimations.length > 1
+      ? `${file.name} · ${addedAnimations.length} clips を追加しました`
+      : `${file.name} をリターゲットしました`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'アニメーションの変換に失敗しました';
     showToast(message);
   } finally {
-    setLoading(false);
+    if (request === animationRequestSequence) setLoading(false);
   }
 }
 
