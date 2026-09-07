@@ -23,21 +23,20 @@ import { getTimelineScrollLeftForPlayhead } from './timelineScroll.js';
 import type { AnimationState, BoneName, BakeSettings, ExpressionTrackSet, LoadedClip, MotionTrackSet, TrackPath } from './animation/types.js';
 import {
   detectAnimationRig,
-  getSourceTrackBoneName,
   HUMAN_BONES,
-  mapSourceBone,
-  mapUniversalBone,
-  trackPathFor,
 } from './animation/rigMapping.js';
 import type { AnimationRigType } from './animation/rigMapping.js';
 import { retargetMixamoClip } from './animation/mixamoParser.js';
+import { retargetUniversalClip } from './animation/universalParser.js';
+import { isDazFriendlyBvh, retargetDazBvhClip } from './animation/bvhParser.js';
+import { retargetGenericClip } from './animation/genericParser.js';
+import { tracksFromVrma } from './animation/vrmaParser.js';
 import {
   cloneExpressionTrackSet,
   cloneTrackSet,
   continuousQuaternionValues,
   emptyExpressionTrackSet,
   fixedBakeTimes,
-  makeContinuousQuaternionTrack,
   makeQuaternionTrack,
   makeVectorTrack,
   maxBakeFrameStepForFps,
@@ -803,232 +802,6 @@ function chooseFbxRigType(fileName: string): Promise<AnimationRigType | null> {
     dom.fbxRigDialog.addEventListener('close', handleClose, { once: true });
     dom.fbxRigDialog.showModal();
   });
-}
-
-function normalizeSourceQuaternionTrack(track: THREE.KeyframeTrack): THREE.QuaternionKeyframeTrack {
-  const times = Array.from(track.times);
-  const values = Array.from(track.values);
-  const first = new THREE.Quaternion().fromArray(values.slice(0, 4) as [number, number, number, number]);
-  const inverseFirst = first.clone().invert();
-  const normalized: number[] = [];
-  for (let index = 0; index < values.length; index += 4) {
-    const current = new THREE.Quaternion().fromArray(values.slice(index, index + 4) as [number, number, number, number]);
-    normalized.push(...inverseFirst.clone().multiply(current).normalize().toArray());
-  }
-  return makeQuaternionTrack('', times, normalized);
-}
-
-function normalizeSourcePositionTrack(track: THREE.KeyframeTrack, onlyRoot: boolean): THREE.VectorKeyframeTrack {
-  const times = Array.from(track.times);
-  const values = Array.from(track.values);
-  const first = values.slice(0, 3);
-  const normalized = values.map((value, index) => onlyRoot ? value - (first[index % 3] ?? 0) : value);
-  return makeVectorTrack('', times, normalized);
-}
-
-function evaluateTrackAt(track: THREE.KeyframeTrack, time: number): number[] {
-  const size = track.getValueSize();
-  const trackWithInterpolant = track as THREE.KeyframeTrack & {
-    createInterpolant: (result: Float32Array) => { evaluate: (time: number) => ArrayLike<number> };
-  };
-  const firstTime = track.times[0] ?? 0;
-  const lastTime = track.times[track.times.length - 1] ?? firstTime;
-  return Array.from(trackWithInterpolant.createInterpolant(new Float32Array(size)).evaluate(clamp(time, firstTime, lastTime)));
-}
-
-function retargetUniversalClip(
-  asset: THREE.Group,
-  clip: THREE.AnimationClip,
-  vrm: VRM | null,
-): { tracks: MotionTrackSet; restHipsY: number } {
-  const motionHips = asset.getObjectByName('pelvis');
-  if (motionHips == null) throw new Error('Universal humanoid の pelvis が見つかりませんでした');
-  asset.updateMatrixWorld(true);
-  // UAL files are Z-up. Convert their coordinates to VRM's Y-up space before
-  // applying translation tracks and relative bone rotations.
-  const sourceToVrm = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-  const vrmToSource = sourceToVrm.clone().invert();
-  const restHipsWorldPosition = motionHips.getWorldPosition(new THREE.Vector3()).applyQuaternion(sourceToVrm);
-  const motionHipsHeight = Math.max(Math.abs(restHipsWorldPosition.y), 0.0001);
-  const sourceRoot = asset.getObjectByName('root');
-  const sourceRootParentMatrix = sourceRoot?.parent?.matrixWorld.clone() ?? new THREE.Matrix4();
-  const tracks: MotionTrackSet = new Map();
-  const trackByName = new Map(clip.tracks.map((track) => [track.name, track]));
-  const hipsPositionTrack = trackByName.get('pelvis.position');
-  const rootPositionTrack = trackByName.get('root.position');
-  const rootRotationTrack = trackByName.get('root.quaternion');
-
-  if (hipsPositionTrack != null || rootPositionTrack != null) {
-    const translationTimes = Array.from(new Set([
-      ...(hipsPositionTrack == null ? [] : Array.from(hipsPositionTrack.times)),
-      ...(rootPositionTrack == null ? [] : Array.from(rootPositionTrack.times)),
-      ...(rootRotationTrack == null ? [] : Array.from(rootRotationTrack.times)),
-    ])).sort((a, b) => a - b);
-    const values: number[] = [];
-    translationTimes.forEach((time) => {
-      const rootPosition = rootPositionTrack == null
-        ? sourceRoot?.position.clone() ?? new THREE.Vector3()
-        : new THREE.Vector3().fromArray(evaluateTrackAt(rootPositionTrack, time) as [number, number, number]);
-      const rootRotation = rootRotationTrack == null
-        ? sourceRoot?.quaternion.clone() ?? new THREE.Quaternion()
-        : new THREE.Quaternion().fromArray(evaluateTrackAt(rootRotationTrack, time) as [number, number, number, number]);
-      const hipsPosition = hipsPositionTrack == null
-        ? motionHips.position.clone()
-        : new THREE.Vector3().fromArray(evaluateTrackAt(hipsPositionTrack, time) as [number, number, number]);
-      const sourcePosition = hipsPosition
-        .applyQuaternion(rootRotation)
-        .add(rootPosition)
-        .applyMatrix4(sourceRootParentMatrix)
-        .applyQuaternion(sourceToVrm);
-      // VRMA's normalized hips rest position has no horizontal offset.
-      sourcePosition.x -= restHipsWorldPosition.x;
-      sourcePosition.z -= restHipsWorldPosition.z;
-      values.push(...sourcePosition.toArray());
-    });
-    setTrack(tracks, 'hips', 'translation', makeVectorTrack('', translationTimes, values));
-  }
-
-  clip.tracks.forEach((sourceTrack) => {
-    const [sourceNodeName, propertyName] = sourceTrack.name.split('.');
-    if (sourceNodeName == null || propertyName == null) return;
-    const sourceBone = mapUniversalBone(sourceNodeName);
-    if (sourceBone == null || (vrm != null && vrm.humanoid.getNormalizedBoneNode(sourceBone as never) == null)) return;
-    const sourceNode = asset.getObjectByName(sourceNodeName);
-    if (sourceNode?.parent == null) return;
-    if (!(sourceTrack instanceof THREE.QuaternionKeyframeTrack)) return;
-
-    const restRotationInverse = sourceNode.getWorldQuaternion(new THREE.Quaternion()).invert();
-    const parentRestWorldRotation = sourceNode.parent.getWorldQuaternion(new THREE.Quaternion());
-    const values: number[] = [];
-    for (let index = 0; index < sourceTrack.values.length; index += 4) {
-      const quaternion = new THREE.Quaternion()
-        .fromArray(Array.from(sourceTrack.values.slice(index, index + 4)) as [number, number, number, number])
-        .premultiply(parentRestWorldRotation)
-        .multiply(restRotationInverse)
-        .normalize();
-      values.push(...sourceToVrm.clone().multiply(quaternion).multiply(vrmToSource).normalize().toArray());
-    }
-    setTrack(tracks, sourceBone, 'rotation', makeQuaternionTrack('', Array.from(sourceTrack.times), values));
-  });
-  return { tracks, restHipsY: motionHipsHeight };
-}
-
-function retargetGenericClip(clip: THREE.AnimationClip): MotionTrackSet {
-  const tracks: MotionTrackSet = new Map();
-  clip.tracks.forEach((sourceTrack) => {
-    const path = trackPathFor(sourceTrack);
-    if (path == null) return;
-    const sourceBone = mapSourceBone(getSourceTrackBoneName(sourceTrack.name));
-    if (sourceBone == null) return;
-    if (path === 'translation' && sourceBone !== 'hips') return;
-    const normalized = path === 'rotation'
-      ? normalizeSourceQuaternionTrack(sourceTrack)
-      : normalizeSourcePositionTrack(sourceTrack, sourceBone === 'hips');
-    setTrack(tracks, sourceBone, path, normalized);
-  });
-  return tracks;
-}
-
-
-
-
-
-
-function isDazFriendlyBvh(skeleton: THREE.Skeleton): boolean {
-  const names = new Set(skeleton.bones.map((bone) => bone.name.toLowerCase()));
-  return names.has('hip')
-    && names.has('abdomen')
-    && names.has('rshldr')
-    && names.has('lshldr')
-    && names.has('rthigh')
-    && names.has('lthigh');
-}
-
-function estimateBvhRestHipsHeight(skeleton: THREE.Skeleton): number {
-  const root = skeleton.bones[0];
-  if (root == null) return 1;
-  root.updateMatrixWorld(true);
-  const rootY = root.getWorldPosition(new THREE.Vector3()).y;
-  let lowestY = rootY;
-  skeleton.bones.forEach((bone) => {
-    lowestY = Math.min(lowestY, bone.getWorldPosition(new THREE.Vector3()).y);
-  });
-  return Math.max(0.0001, Math.abs(rootY - lowestY));
-}
-
-function normalizeDazBvhRootTranslation(track: THREE.KeyframeTrack, restHipsY: number): THREE.VectorKeyframeTrack {
-  const times = Array.from(track.times);
-  const values = Array.from(track.values);
-  const first = values.slice(0, 3);
-  const normalized: number[] = [];
-  for (let index = 0; index + 2 < values.length; index += 3) {
-    normalized.push(
-      values[index] - (first[0] ?? 0),
-      restHipsY + values[index + 1] - (first[1] ?? 0),
-      values[index + 2] - (first[2] ?? 0),
-    );
-  }
-  return makeVectorTrack('', times, normalized);
-}
-
-function retargetDazBvhClip(
-  skeleton: THREE.Skeleton,
-  clip: THREE.AnimationClip,
-  vrm: VRM | null,
-): { tracks: MotionTrackSet; restHipsY: number } {
-  const tracks: MotionTrackSet = new Map();
-  const root = skeleton.bones[0];
-  const restHipsY = estimateBvhRestHipsHeight(skeleton);
-  const rootPositionTrack = root == null
-    ? null
-    : clip.tracks.find((track) => track.name === `${root.name}.position`) ?? null;
-
-  clip.tracks.forEach((sourceTrack) => {
-    const path = trackPathFor(sourceTrack);
-    if (path == null) return;
-    const sourceBone = mapSourceBone(getSourceTrackBoneName(sourceTrack.name));
-    if (sourceBone == null || (vrm != null && vrm.humanoid.getNormalizedBoneNode(sourceBone as never) == null)) return;
-
-    if (path === 'translation') {
-      if (sourceBone === 'hips' && sourceTrack === rootPositionTrack) {
-        setTrack(tracks, sourceBone, 'translation', normalizeDazBvhRootTranslation(sourceTrack, restHipsY));
-      }
-      return;
-    }
-    if (!(sourceTrack instanceof THREE.QuaternionKeyframeTrack)) return;
-    // BVHLoader already evaluates the channel order from the Daz export. The
-    // resulting rotations are local T-pose-relative rotations, so remove no
-    // first-frame rotation here. Only fix quaternion sign changes, which are
-    // mathematically equivalent but would otherwise create interpolation flips.
-    setTrack(
-      tracks,
-      sourceBone,
-      'rotation',
-      makeContinuousQuaternionTrack('', Array.from(sourceTrack.times), Array.from(sourceTrack.values)),
-    );
-  });
-  return { tracks, restHipsY };
-}
-
-function tracksFromVrma(animation: VRMAnimation): {
-  tracks: MotionTrackSet;
-  expressionTracks: ExpressionTrackSet;
-  lookAtTrack: THREE.QuaternionKeyframeTrack | null;
-} {
-  const tracks: MotionTrackSet = new Map();
-  animation.humanoidTracks.rotation.forEach((track, boneName) => {
-    const bone = boneName as BoneName;
-    if (HUMAN_BONES.includes(bone)) setTrack(tracks, bone, 'rotation', track.clone());
-  });
-  animation.humanoidTracks.translation.forEach((track, boneName) => {
-    const bone = boneName as BoneName;
-    if (HUMAN_BONES.includes(bone)) setTrack(tracks, bone, 'translation', track.clone());
-  });
-  return {
-    tracks,
-    expressionTracks: cloneExpressionTrackSet(animation.expressionTracks),
-    lookAtTrack: animation.lookAtTrack?.clone() ?? null,
-  };
 }
 
 function copyTrackInterpolation(source: THREE.KeyframeTrack, target: THREE.KeyframeTrack): void {
