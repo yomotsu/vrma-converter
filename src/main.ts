@@ -1778,30 +1778,6 @@ function formatSpeedMultiplier(multiplier: number): string {
   return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}×`;
 }
 
-function scaleTrackTimes(track: THREE.KeyframeTrack, multiplier: number): THREE.KeyframeTrack {
-  const scaled = track.clone();
-  scaled.times = Float32Array.from(track.times, (time) => time / multiplier);
-  return scaled;
-}
-
-function scaleTrackSetTimes(source: MotionTrackSet, multiplier: number): MotionTrackSet {
-  const scaled: MotionTrackSet = new Map();
-  source.forEach((tracks, bone) => {
-    const next: Partial<Record<TrackPath, THREE.KeyframeTrack>> = {};
-    if (tracks.rotation != null) next.rotation = scaleTrackTimes(tracks.rotation, multiplier);
-    if (tracks.translation != null) next.translation = scaleTrackTimes(tracks.translation, multiplier);
-    scaled.set(bone, next);
-  });
-  return scaled;
-}
-
-function scaleExpressionTrackSetTimes(source: ExpressionTrackSet, multiplier: number): ExpressionTrackSet {
-  const scaled = emptyExpressionTrackSet();
-  source.preset.forEach((track, name) => scaled.preset.set(name, scaleTrackTimes(track, multiplier) as THREE.NumberKeyframeTrack));
-  source.custom.forEach((track, name) => scaled.custom.set(name, scaleTrackTimes(track, multiplier) as THREE.NumberKeyframeTrack));
-  return scaled;
-}
-
 function applySpeed(): void {
   const animation = state.animation;
   const multiplier = state.speedMultiplier;

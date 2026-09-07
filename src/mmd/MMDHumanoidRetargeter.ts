@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
-import { continuousQuaternionValues } from '../animation/trackUtils.js';
-import { retargetMmdExpressions } from './MMDExpressionRetargeter.js';
-import type { MMDExpressionAvailability, MMDExpressionMotion } from './MMDExpressionRetargeter.js';
+import { continuousQuaternionValues } from './MMDMotionMath.ts';
+import { retargetMmdExpressions } from './MMDExpressionRetargeter.ts';
+import type { MMDExpressionAvailability, MMDExpressionMotion } from './MMDExpressionRetargeter.ts';
 import type { MMDMotionBakeResult, MMDMotionBoneTrack } from './MMDMotionTypes.js';
 
 export type MMDHumanoidMotion = {

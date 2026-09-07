@@ -73,7 +73,7 @@ export function maxBakeFrameStepForFps(fps: number): number {
 export function fixedBakeTimes(duration: number, fps: number, frameStep: number, preservedTimes: number[] = []): number[] {
   const safeDuration = Math.max(0, duration);
   const safeFps = normalizeBakeFps(fps);
-  const safeDivisionCount = Math.round(Math.max(2, Math.min(maxBakeFrameStepForFps(safeFps), frameStep)));
+  const safeDivisionCount = Math.round(Math.max(MIN_BAKE_FRAME_STEP, Math.min(maxBakeFrameStepForFps(safeFps), frameStep)));
   if (safeDuration <= 0) return [0];
   const frameInterval = safeFps / safeDivisionCount;
   const stepCount = Math.floor((safeDuration * safeFps + 0.000001) / frameInterval);
@@ -101,7 +101,9 @@ export function sampleTrack(track: THREE.KeyframeTrack, duration: number, settin
   const interpolant = trackWithInterpolant.createInterpolant(new Float32Array(size));
   const values: number[] = [];
   times.forEach((time) => values.push(...Array.from(interpolant.evaluate(time))));
-  const baked = path === 'rotation' ? makeQuaternionTrack(track.name, times, values) : makeVectorTrack(track.name, times, values);
+  const baked = path === 'rotation'
+    ? makeContinuousQuaternionTrack(track.name, times, values)
+    : makeVectorTrack(track.name, times, values);
   preserveTrackInterpolation(track, baked);
   return baked;
 }

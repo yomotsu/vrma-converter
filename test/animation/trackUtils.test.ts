@@ -24,8 +24,11 @@ test('sampleTrack preserves quaternion continuity and source interpolation', () 
   const sampled = sampleTrack(source, 1, { fps: 30, frameStep: 1 }, 'rotation');
 
   assert.equal(sampled.getInterpolation(), THREE.InterpolateDiscrete);
-  assert.equal(sampled.times.length, 3);
-  assert.deepEqual(Array.from(sampled.values).slice(0, 8), [0, 0, 0, 1, 0, 0, 0, 1]);
+  assert.equal(sampled.times.length, 2);
+  assert.deepEqual(Array.from(sampled.values), [
+    0, 0, 0, 1,
+    0, 0, 0, 1,
+  ]);
 });
 
 test('scaleTrackSetTimes clones tracks and divides key times by the multiplier', () => {

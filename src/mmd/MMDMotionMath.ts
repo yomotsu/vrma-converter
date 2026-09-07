@@ -1,4 +1,4 @@
-export { continuousQuaternionValues } from '../animation/trackUtils.js';
+export { continuousQuaternionValues } from '../animation/trackUtils.ts';
 
 export function createMmdFrameTimes(duration: number, fps = 30): number[] {
   const safeDuration = Math.max(0, Number.isFinite(duration) ? duration : 0);
