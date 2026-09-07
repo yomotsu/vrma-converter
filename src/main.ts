@@ -10,6 +10,8 @@ import type { VRM } from '@pixiv/three-vrm';
 import { VRMAnimationLoaderPlugin, VRMLookAtQuaternionProxy } from '@pixiv/three-vrm-animation';
 import type { VRMAnimation } from '@pixiv/three-vrm-animation';
 import defaultVrmUrl from '../assets/model.vrm?url';
+import defaultMmdModelUrl from '../assets/mobuko.pmx?url';
+import { MMDPlayer } from './mmd/index.js';
 
 type BoneName =
   | 'hips'
@@ -140,6 +142,7 @@ const $ = <T extends HTMLElement>(selector: string) => document.querySelector(se
 
 const dom = {
   viewport: $<HTMLCanvasElement>('#viewport'),
+  overlayCanvas: $<HTMLCanvasElement>('#overlay-canvas'),
   viewportShell: $<HTMLElement>('#viewport-shell'),
   loading: $<HTMLElement>('#loading-overlay'),
   loadingLabel: $<HTMLElement>('#loading-label'),
@@ -425,6 +428,7 @@ gltfLoader.register((parser) => new VRMLoaderPlugin(parser));
 gltfLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 const fbxLoader = new FBXLoader();
 const bvhLoader = new BVHLoader();
+const mmdPlayer = new MMDPlayer(dom.overlayCanvas, { modelUrl: defaultMmdModelUrl });
 
 const state: {
   model: ModelState | null;
@@ -1787,8 +1791,18 @@ function removeAnimation(id: string): void {
 
 async function handleAnimationFile(file: File): Promise<void> {
   const extension = extensionOf(file.name);
+  if (extension === 'vmd') {
+    try {
+      await mmdPlayer.playVmd(file);
+      showToast(`${file.name} を MMD プレビューで再生しています`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'VMD の読み込みに失敗しました';
+      showToast(message);
+    }
+    return;
+  }
   if (!['vrma', 'glb', 'gltf', 'fbx', 'bvh'].includes(extension)) {
-    showToast('VRMA / GLB / GLTF / FBX / BVH を選択してください');
+    showToast('VRMA / GLB / GLTF / FBX / BVH / VMD を選択してください');
     return;
   }
   setLoading(true, 'RETARGETING MOTION');
@@ -2807,6 +2821,7 @@ function animate(): void {
   }
   if (state.model?.vrm != null) state.model.vrm.update(delta);
   renderer.render(scene, camera);
+  mmdPlayer.update(delta);
   if (performance.now() - state.lastUiUpdate > 40) {
     state.lastUiUpdate = performance.now();
     updatePlayhead();

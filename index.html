@@ -38,10 +38,10 @@
               <span class="dropzone-plus">+</span>
               <strong>アニメーションをドロップ</strong>
               <small>Mixamo の FBX<br />Universal humanoid rig 対応 FBX<br />BVH / VRMA など</small>
-              <span class="format-row"><i>GLB</i><i>FBX</i><i>BVH</i><i>VRMA</i></span>
+              <span class="format-row"><i>GLB</i><i>FBX</i><i>BVH</i><i>VRMA</i><i>VMD</i></span>
               <span class="dropzone-arrow" aria-hidden="true">↗</span>
             </button>
-            <input id="animation-file-input" class="visually-hidden" type="file" accept=".vrma,.glb,.gltf,.fbx,.bvh,model/gltf-binary,model/gltf+json" />
+            <input id="animation-file-input" class="visually-hidden" type="file" accept=".vrma,.glb,.gltf,.fbx,.bvh,.vmd,model/gltf-binary,model/gltf+json" />
           </section>
 
           <section class="sidebar-section queue-section">
@@ -195,6 +195,7 @@
       </dialog>
 
       <div class="toast" id="toast" role="status" aria-live="polite"><span class="toast-icon">✦</span><span id="toast-message">Ready</span></div>
+      <canvas id="overlay-canvas" class="overlay-canvas" width="256" height="256" aria-hidden="true"></canvas>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

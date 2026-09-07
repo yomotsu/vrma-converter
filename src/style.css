@@ -1843,6 +1843,17 @@ input[type='range']::-moz-range-thumb {
   color: var(--cyan);
 }
 
+.overlay-canvas {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  display: block;
+  width: 256px;
+  height: 256px;
+  pointer-events: none;
+}
+
 @media (max-width: 1280px) {
   .workspace {
     grid-template-columns: 235px minmax(510px, 1fr) 280px;
