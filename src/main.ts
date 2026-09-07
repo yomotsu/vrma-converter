@@ -19,6 +19,7 @@ import type { AnimationRigType } from './animation/rigMapping.js';
 import { isSupportedAnimationFormat, parseAnimationFile } from './animation/parseAnimationFile.js';
 import { createPreviewAnimation } from './animation/previewAnimation.js';
 import { createVrmaBlob } from './vrma/exportVrma.js';
+import { displayFormatForImport } from './animation/displayFormat.js';
 import { dom } from './ui/dom.js';
 import { installAlwaysVisibleScrollbars } from './ui/scrollbars.js';
 import { allAnimationKeyTimes, createTimelineController } from './ui/timeline.js';
@@ -533,7 +534,7 @@ async function handleAnimationFile(file: File): Promise<void> {
       const loaded = loadedClipFromMmdBake(baked, state.model?.vrm ?? null);
       if (!loaded.compatible) throw new Error('VMDから対応するボーンまたは表情を抽出できませんでした');
       loaded.clipName = withoutExtension(file.name);
-      addLoadedAnimationClips(file, [loaded], 'VRMA', 'VMD');
+      addLoadedAnimationClips(file, [loaded], displayFormatForImport(extension), 'VMD');
       showToast(`${file.name} をIK・表情変換してVRMA化しました`);
     } catch (error) {
       if (request === animationRequestSequence) {
@@ -556,7 +557,7 @@ async function handleAnimationFile(file: File): Promise<void> {
     });
     if (request !== animationRequestSequence) return;
     if (loadedClips.length === 0 || !loadedClips.some((clip) => clip.compatible)) throw new Error('対応する humanoid ボーンが見つかりませんでした');
-    const addedAnimations = addLoadedAnimationClips(file, loadedClips, extension.toUpperCase());
+    const addedAnimations = addLoadedAnimationClips(file, loadedClips, displayFormatForImport(extension));
     showToast(addedAnimations.length > 1
       ? `${file.name} · ${addedAnimations.length} clips を追加しました`
       : `${file.name} をリターゲットしました`);
