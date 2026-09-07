@@ -22,6 +22,8 @@ import { createVrmaBlob } from './vrma/exportVrma.js';
 import { displayFormatForImport } from './animation/displayFormat.js';
 import { advancePlaybackTime } from './animation/playback.js';
 import { dom } from './ui/dom.js';
+import { getBoneMappingDetails } from './ui/boneMappingDetails.js';
+import { isBoneMappingPopoverOpen, setBoneMappingPopoverOpen } from './ui/boneMappingPopover.js';
 import { installAlwaysVisibleScrollbars } from './ui/scrollbars.js';
 import { allAnimationKeyTimes, createTimelineController } from './ui/timeline.js';
 import { createStage } from './viewer/stage.js';
@@ -663,17 +665,43 @@ function revertBake(): void {
   showToast('オリジナルのファイル状態に戻しました');
 }
 
+function renderBoneMappingDetails(): void {
+  dom.bonesPopoverList.replaceChildren();
+  if (state.model == null) return;
+  getBoneMappingDetails(state.model.bones).forEach(({ name, mapped }) => {
+    const row = document.createElement('div');
+    row.className = 'bones-popover-row';
+    const nameElement = document.createElement('span');
+    nameElement.textContent = name;
+    const statusElement = document.createElement('span');
+    statusElement.className = mapped ? 'is-mapped' : 'is-missing';
+    statusElement.textContent = mapped ? 'Mapped' : 'Missing';
+    row.append(nameElement, statusElement);
+    dom.bonesPopoverList.append(row);
+  });
+}
+
+function setBoneMappingDetailsOpen(open: boolean): void {
+  if (state.model == null && open) return;
+  setBoneMappingPopoverOpen(dom.bonesPopover, open);
+  dom.bonesReadout.setAttribute('aria-expanded', String(open));
+  dom.bonesReadout.setAttribute('aria-label', open ? 'ボーンのマッピング詳細を閉じる' : 'ボーンのマッピング詳細を表示');
+}
+
 
 function updateInterface(): void {
   const model = state.model;
   const animation = state.animation;
   const mapped = model == null ? 0 : HUMAN_BONES.filter((bone) => model.bones[bone] != null).length;
   const total = HUMAN_BONES.length;
+  dom.bonesReadout.disabled = model == null;
+  if (model == null) setBoneMappingDetailsOpen(false);
+  renderBoneMappingDetails();
   if (model != null) {
     dom.modelName.textContent = model.name;
     dom.modelStatus.textContent = model.source === 'bundled' ? 'ASSETS · BUNDLED VRM' : 'LOCAL FILE · VRM';
   }
-  dom.bonesReadout.textContent = `${mapped} / ${total}`;
+  dom.bonesReadoutValue.textContent = `${mapped} / ${total}`;
   if (animation != null) {
     const keyCount = allAnimationKeyTimes(animation).length;
     const previewSettings = animation.bakePreview;
@@ -870,6 +898,26 @@ function bindEvents(): void {
   });
   dom.viewportBackgroundButton.addEventListener('click', stage.toggleViewportBackground);
   dom.bonesToggleButton.addEventListener('click', stage.toggleBonesVisible);
+  dom.bonesReadout.addEventListener('click', () => {
+    setBoneMappingDetailsOpen(!isBoneMappingPopoverOpen(dom.bonesPopover));
+  });
+  dom.bonesPopover.addEventListener('toggle', (event) => {
+    const newState = (event as ToggleEvent).newState;
+    const open = newState === 'open';
+    dom.bonesReadout.setAttribute('aria-expanded', String(open));
+    dom.bonesReadout.setAttribute('aria-label', open ? 'ボーンのマッピング詳細を閉じる' : 'ボーンのマッピング詳細を表示');
+  });
+  document.addEventListener('pointerdown', (event) => {
+    const target = event.target as Node;
+    if (isBoneMappingPopoverOpen(dom.bonesPopover) && !dom.bonesPopover.contains(target) && !dom.bonesReadout.contains(target)) {
+      setBoneMappingDetailsOpen(false);
+    }
+  }, true);
+  if (typeof dom.bonesPopover.showPopover !== 'function') {
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setBoneMappingDetailsOpen(false);
+    });
+  }
   dom.resetView.addEventListener('click', resetView);
   dom.viewportZoomOutButton.addEventListener('click', stage.zoomViewportOut);
   dom.viewportZoomButton.addEventListener('click', stage.zoomViewportIn);

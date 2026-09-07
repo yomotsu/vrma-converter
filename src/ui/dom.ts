@@ -13,7 +13,10 @@ export type DomElements = {
   assetList: HTMLElement;
   modelName: HTMLElement;
   modelStatus: HTMLElement;
-  bonesReadout: HTMLElement;
+  bonesReadout: HTMLButtonElement;
+  bonesReadoutValue: HTMLElement;
+  bonesPopover: HTMLElement;
+  bonesPopoverList: HTMLElement;
   queueCount: HTMLElement;
   dataDuration: HTMLElement;
   dataKeyframes: HTMLElement;
@@ -80,7 +83,10 @@ export const dom: DomElements = {
   assetList: $<HTMLElement>('#asset-list'),
   modelName: $<HTMLElement>('#model-name'),
   modelStatus: $<HTMLElement>('#model-status'),
-  bonesReadout: $<HTMLElement>('#readout-bones'),
+  bonesReadout: $<HTMLButtonElement>('#readout-bones'),
+  bonesReadoutValue: $<HTMLElement>('#readout-bones-value'),
+  bonesPopover: $<HTMLElement>('#bones-popover'),
+  bonesPopoverList: $<HTMLElement>('#bones-popover-list'),
   queueCount: $<HTMLElement>('#queue-count'),
   dataDuration: $<HTMLElement>('#data-duration'),
   dataKeyframes: $<HTMLElement>('#data-keyframes'),
