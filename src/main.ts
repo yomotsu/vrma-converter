@@ -20,69 +20,28 @@ import {
 } from './mmd/index.js';
 import type { MMDMotionBakeResult } from './mmd/index.js';
 import { getTimelineScrollLeftForPlayhead } from './timelineScroll.js';
+import type { AnimationState, BoneName, BakeSettings, ExpressionTrackSet, LoadedClip, MotionTrackSet, TrackPath } from './animation/types.js';
+import {
+  cloneExpressionTrackSet,
+  cloneTrackSet,
+  continuousQuaternionValues,
+  emptyExpressionTrackSet,
+  fixedBakeTimes,
+  makeContinuousQuaternionTrack,
+  makeQuaternionTrack,
+  makeVectorTrack,
+  maxBakeFrameStepForFps,
+  normalizeBakeFps,
+  processExpressionTracks,
+  processTracks,
+  sampleTrack,
+  scaleExpressionTrackSetTimes,
+  scaleTrackTimes,
+  scaleTrackSetTimes,
+  setTrack,
+} from './animation/trackUtils.js';
 
-type BoneName =
-  | 'hips'
-  | 'spine'
-  | 'chest'
-  | 'upperChest'
-  | 'neck'
-  | 'head'
-  | 'jaw'
-  | 'leftEye'
-  | 'rightEye'
-  | 'leftShoulder'
-  | 'leftUpperArm'
-  | 'leftLowerArm'
-  | 'leftHand'
-  | 'rightShoulder'
-  | 'rightUpperArm'
-  | 'rightLowerArm'
-  | 'rightHand'
-  | 'leftUpperLeg'
-  | 'leftLowerLeg'
-  | 'leftFoot'
-  | 'leftToes'
-  | 'rightUpperLeg'
-  | 'rightLowerLeg'
-  | 'rightFoot'
-  | 'rightToes'
-  | 'leftThumbMetacarpal'
-  | 'leftThumbProximal'
-  | 'leftThumbDistal'
-  | 'leftIndexProximal'
-  | 'leftIndexIntermediate'
-  | 'leftIndexDistal'
-  | 'leftMiddleProximal'
-  | 'leftMiddleIntermediate'
-  | 'leftMiddleDistal'
-  | 'leftRingProximal'
-  | 'leftRingIntermediate'
-  | 'leftRingDistal'
-  | 'leftLittleProximal'
-  | 'leftLittleIntermediate'
-  | 'leftLittleDistal'
-  | 'rightThumbMetacarpal'
-  | 'rightThumbProximal'
-  | 'rightThumbDistal'
-  | 'rightIndexProximal'
-  | 'rightIndexIntermediate'
-  | 'rightIndexDistal'
-  | 'rightMiddleProximal'
-  | 'rightMiddleIntermediate'
-  | 'rightMiddleDistal'
-  | 'rightRingProximal'
-  | 'rightRingIntermediate'
-  | 'rightRingDistal'
-  | 'rightLittleProximal'
-  | 'rightLittleIntermediate'
-  | 'rightLittleDistal';
-
-type TrackPath = 'rotation' | 'translation';
-type MotionTrackSet = Map<BoneName, Partial<Record<TrackPath, THREE.KeyframeTrack>>>;
-type ExpressionTrackSet = VRMAnimation['expressionTracks'];
 type ExpressionPresetName = Parameters<ExpressionTrackSet['preset']['set']>[0];
-type BakeSettings = { fps: number; frameStep: number };
 
 const MIN_BAKE_FPS = 1;
 const MAX_BAKE_FPS = 240;
@@ -102,35 +61,6 @@ type ModelState = {
   source: 'bundled' | 'local';
   objectUrl?: string;
   height: number;
-};
-
-type AnimationState = {
-  id: string;
-  name: string;
-  displayName: string;
-  clipName: string;
-  clipIndex: number;
-  clipCount: number;
-  format: string;
-  derivedFrom?: 'VMD';
-  duration: number;
-  sourceFps: number;
-  restHipsY: number;
-  originalTracks: MotionTrackSet;
-  sourceTracks: MotionTrackSet;
-  tracks: MotionTrackSet;
-  originalExpressionTracks: ExpressionTrackSet;
-  sourceExpressionTracks: ExpressionTrackSet;
-  expressionTracks: ExpressionTrackSet;
-  originalLookAtTrack: THREE.QuaternionKeyframeTrack | null;
-  sourceLookAtTrack: THREE.QuaternionKeyframeTrack | null;
-  lookAtTrack: THREE.QuaternionKeyframeTrack | null;
-  source: 'preview' | 'file';
-  compatible: boolean;
-  bakePreview: BakeSettings | null;
-  bakeApplied: boolean;
-  originalDuration: number;
-  appliedSpeedMultiplier: number;
 };
 
 const HUMAN_BONES: BoneName[] = [
@@ -802,61 +732,6 @@ async function loadVrmUrl(url: string, name: string, source: 'bundled' | 'local'
   }
 }
 
-function setTrack(set: MotionTrackSet, bone: BoneName, path: TrackPath, track: THREE.KeyframeTrack): void {
-  const current = set.get(bone) ?? {};
-  current[path] = track;
-  set.set(bone, current);
-}
-
-function cloneTrackSet(source: MotionTrackSet): MotionTrackSet {
-  const clone: MotionTrackSet = new Map();
-  source.forEach((tracks, bone) => {
-    const next: Partial<Record<TrackPath, THREE.KeyframeTrack>> = {};
-    if (tracks.rotation != null) next.rotation = tracks.rotation.clone();
-    if (tracks.translation != null) next.translation = tracks.translation.clone();
-    clone.set(bone, next);
-  });
-  return clone;
-}
-
-function emptyExpressionTrackSet(): ExpressionTrackSet {
-  return { preset: new Map(), custom: new Map() };
-}
-
-function cloneExpressionTrackSet(source: ExpressionTrackSet): ExpressionTrackSet {
-  const clone = emptyExpressionTrackSet();
-  source.preset.forEach((track, name) => clone.preset.set(name, track.clone()));
-  source.custom.forEach((track, name) => clone.custom.set(name, track.clone()));
-  return clone;
-}
-
-function makeQuaternionTrack(name: string, times: number[], values: number[]): THREE.QuaternionKeyframeTrack {
-  return new THREE.QuaternionKeyframeTrack(name, times, values);
-}
-
-function continuousQuaternionValues(values: number[]): number[] {
-  const continuous: number[] = [];
-  let previous: THREE.Quaternion | null = null;
-  for (let index = 0; index + 3 < values.length; index += 4) {
-    const quaternion = new THREE.Quaternion().fromArray(values.slice(index, index + 4) as [number, number, number, number]);
-    if (quaternion.lengthSq() < 0.000000000001) quaternion.identity();
-    else quaternion.normalize();
-    if (previous != null && previous.dot(quaternion) < 0) quaternion.set(-quaternion.x, -quaternion.y, -quaternion.z, -quaternion.w);
-    continuous.push(...quaternion.toArray());
-    previous = quaternion;
-  }
-  return continuous;
-}
-
-function makeContinuousQuaternionTrack(name: string, times: number[], values: number[]): THREE.QuaternionKeyframeTrack {
-  return new THREE.QuaternionKeyframeTrack(name, times, continuousQuaternionValues(values));
-}
-
-function makeVectorTrack(name: string, times: number[], values: number[]): THREE.VectorKeyframeTrack {
-  return new THREE.VectorKeyframeTrack(name, times, values);
-}
-
-
 function quaternionValuesFor(
   times: number[],
   fn: (time: number, index: number) => THREE.Quaternion,
@@ -1393,70 +1268,11 @@ function tracksFromVrma(animation: VRMAnimation): {
   };
 }
 
-function normalizeBakeFps(value: number): number {
-  if (!Number.isFinite(value)) return DEFAULT_BAKE_FPS;
-  return Math.round(clamp(value, MIN_BAKE_FPS, MAX_BAKE_FPS));
-}
-
-function maxBakeFrameStepForFps(fps: number): number {
-  return Math.max(MIN_BAKE_FRAME_STEP, Math.min(MAX_BAKE_FRAME_STEP, Math.floor(normalizeBakeFps(fps))));
-}
-
-function fixedBakeTimes(duration: number, fps: number, frameStep: number, preservedTimes: number[] = []): number[] {
-  const safeDuration = Math.max(0, duration);
-  const safeFps = normalizeBakeFps(fps);
-  const safeDivisionCount = Math.round(clamp(frameStep, MIN_BAKE_FRAME_STEP, maxBakeFrameStepForFps(safeFps)));
-  if (safeDuration <= 0) return [0];
-  const frameInterval = safeFps / safeDivisionCount;
-  const stepCount = Math.floor((safeDuration * safeFps + 0.000001) / frameInterval);
-  const times = Array.from({ length: stepCount + 1 }, (_, index) => Math.min(safeDuration, Number(((index * frameInterval) / safeFps).toFixed(6))));
-  const preserved = preservedTimes
-    .filter((time) => Number.isFinite(time))
-    .map((time) => clamp(time, 0, safeDuration))
-    .map((time) => Number(time.toFixed(6)));
-  preserved.push(Number(safeDuration.toFixed(6)));
-  return Array.from(new Set([...times, ...preserved])).sort((a, b) => a - b);
-}
-
-function sampleTrack(track: THREE.KeyframeTrack, duration: number, settings: BakeSettings, path: TrackPath): THREE.KeyframeTrack {
-  const lastTime = track.times[track.times.length - 1];
-  const times = fixedBakeTimes(duration, settings.fps, settings.frameStep, lastTime == null ? [] : [lastTime]);
-  const size = track.getValueSize();
-  const trackWithInterpolant = track as THREE.KeyframeTrack & {
-    createInterpolant: (result: Float32Array) => { evaluate: (time: number) => ArrayLike<number> };
-  };
-  const interpolant = trackWithInterpolant.createInterpolant(new Float32Array(size));
-  const values: number[] = [];
-  times.forEach((time) => values.push(...Array.from(interpolant.evaluate(time))));
-  const baked = path === 'rotation'
-    ? makeQuaternionTrack(track.name, times, values)
-    : makeVectorTrack(track.name, times, values);
-  preserveTrackInterpolation(track, baked);
-  return baked;
-}
-
-function sampleNumberTrack(track: THREE.NumberKeyframeTrack, duration: number, settings: BakeSettings): THREE.NumberKeyframeTrack {
-  const lastTime = track.times[track.times.length - 1];
-  const times = fixedBakeTimes(duration, settings.fps, settings.frameStep, lastTime == null ? [] : [lastTime]);
-  const trackWithInterpolant = track as THREE.NumberKeyframeTrack & {
-    createInterpolant: (result: Float32Array) => { evaluate: (time: number) => ArrayLike<number> };
-  };
-  const interpolant = trackWithInterpolant.createInterpolant(new Float32Array(1));
-  const values = times.map((time) => Number(interpolant.evaluate(time)[0] ?? 0));
-  const baked = new THREE.NumberKeyframeTrack(track.name, times, values);
-  preserveTrackInterpolation(track, baked);
-  return baked;
-}
-
-function preserveTrackInterpolation(source: THREE.KeyframeTrack, baked: THREE.KeyframeTrack): void {
+function copyTrackInterpolation(source: THREE.KeyframeTrack, target: THREE.KeyframeTrack): void {
   const interpolation = source.getInterpolation();
   if (interpolation === THREE.InterpolateDiscrete || interpolation === THREE.InterpolateLinear || interpolation === THREE.InterpolateSmooth) {
-    baked.setInterpolation(interpolation);
+    target.setInterpolation(interpolation);
   }
-}
-
-function copyTrackInterpolation(source: THREE.KeyframeTrack, target: THREE.KeyframeTrack): void {
-  preserveTrackInterpolation(source, target);
 }
 
 function setBakeSettings(fpsValue: number, frameStepValue: number): void {
@@ -1483,38 +1299,6 @@ function initialBakeFpsFor(animation: AnimationState): number {
 function setBakeFrameStepValue(value: number): void {
   if (!Number.isFinite(value)) return;
   setBakeSettings(state.bakeFps, value);
-}
-
-function processTracks(
-  source: MotionTrackSet,
-  duration: number,
-  bakeSettings: BakeSettings | null,
-): MotionTrackSet {
-  const processed: MotionTrackSet = new Map();
-  source.forEach((trackSet, bone) => {
-    const next: Partial<Record<TrackPath, THREE.KeyframeTrack>> = {};
-    (['rotation', 'translation'] as TrackPath[]).forEach((path) => {
-      const original = trackSet[path];
-      if (original == null) return;
-      next[path] = bakeSettings == null ? original.clone() : sampleTrack(original, duration, bakeSettings, path);
-    });
-    processed.set(bone, next);
-  });
-  return processed;
-}
-
-function processExpressionTracks(
-  source: ExpressionTrackSet,
-  duration: number,
-  bakeSettings: BakeSettings | null,
-): ExpressionTrackSet {
-  const processed = emptyExpressionTrackSet();
-  const process = (original: THREE.NumberKeyframeTrack): THREE.NumberKeyframeTrack => {
-    return bakeSettings == null ? original.clone() : sampleNumberTrack(original, duration, bakeSettings);
-  };
-  source.preset.forEach((track, name) => processed.preset.set(name, process(track)));
-  source.custom.forEach((track, name) => processed.custom.set(name, process(track)));
-  return processed;
 }
 
 function targetNodeFor(bone: BoneName): THREE.Object3D | null {
@@ -1592,17 +1376,6 @@ function rebuildAction(): void {
   state.mixer.setTime(state.time);
   if (!state.isPlaying) state.action.paused = true;
 }
-
-type LoadedClip = {
-  tracks: MotionTrackSet;
-  expressionTracks: ExpressionTrackSet;
-  lookAtTrack: THREE.QuaternionKeyframeTrack | null;
-  duration: number;
-  sourceFps: number;
-  restHipsY: number;
-  clipName: string;
-  compatible: boolean;
-};
 
 function loadedClipFromMmdBake(result: MMDMotionBakeResult, targetVrm: VRM | null): LoadedClip {
   const available = targetVrm == null

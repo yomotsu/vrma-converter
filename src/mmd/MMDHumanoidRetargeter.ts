@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
-import { continuousQuaternionValues } from './MMDMotionMath.ts';
-import { retargetMmdExpressions } from './MMDExpressionRetargeter.ts';
-import type { MMDExpressionAvailability, MMDExpressionMotion } from './MMDExpressionRetargeter.ts';
+import { continuousQuaternionValues } from '../animation/trackUtils.js';
+import { retargetMmdExpressions } from './MMDExpressionRetargeter.js';
+import type { MMDExpressionAvailability, MMDExpressionMotion } from './MMDExpressionRetargeter.js';
 import type { MMDMotionBakeResult, MMDMotionBoneTrack } from './MMDMotionTypes.js';
 
 export type MMDHumanoidMotion = {
@@ -243,7 +243,9 @@ export function retargetMmdMotion(
     rotationTracks.set('hips', createQuaternionTrack('hips', times, hipsWorldQuaternions));
   }
 
-  const translationSource = hipsSources[0];
+  const translationSource = findCenterRoleBone(result, 'lowerBody')
+    ?? findCenterRoleBone(result, 'center')
+    ?? hipsSources[0];
   const translationTrack = translationSource != null && canOutputBone(availableHumanoidNames, 'hips')
     ? createHipsTranslationTrack(times, translationSource)
     : null;

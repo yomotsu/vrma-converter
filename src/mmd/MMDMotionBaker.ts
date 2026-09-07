@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-import { continuousQuaternionValues, createMmdFrameTimes } from './MMDMotionMath.ts';
+import { createMmdFrameTimes } from './MMDMotionMath.js';
+import { continuousQuaternionValues } from '../animation/trackUtils.js';
 import type {
   MMDMotionBakeResult,
   MMDMotionBoneTrack,
