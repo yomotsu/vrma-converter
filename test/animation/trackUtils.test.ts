@@ -10,8 +10,13 @@ import {
   setTrack,
 } from '../../src/animation/trackUtils.ts';
 
-test('fixedBakeTimes keeps the duration and the original final key', () => {
-  assert.deepEqual(fixedBakeTimes(1, 30, 2, [0.73]), [0, 0.5, 0.73, 1]);
+test('fixedBakeTimes samples every frame step at the selected bake FPS', () => {
+  assert.deepEqual(fixedBakeTimes(0.2, 30, 2, [0.15]), [0, 0.066667, 0.133333, 0.15, 0.2]);
+});
+
+test('fixedBakeTimes limits the frame step to the selected bake FPS', () => {
+  assert.deepEqual(fixedBakeTimes(2, 30, 60), [0, 1, 2]);
+  assert.deepEqual(fixedBakeTimes(2, 240, 240), [0, 1, 2]);
 });
 
 test('sampleTrack preserves quaternion continuity and source interpolation', () => {
@@ -21,7 +26,7 @@ test('sampleTrack preserves quaternion continuity and source interpolation', () 
     [0, 0, 0, 1, 0, 0, 0, -1],
   );
   source.setInterpolation(THREE.InterpolateDiscrete);
-  const sampled = sampleTrack(source, 1, { fps: 30, frameStep: 1 }, 'rotation');
+  const sampled = sampleTrack(source, 1, { fps: 30, frameStep: 30 }, 'rotation');
 
   assert.equal(sampled.getInterpolation(), THREE.InterpolateDiscrete);
   assert.equal(sampled.times.length, 2);

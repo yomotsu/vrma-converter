@@ -22,9 +22,8 @@ export type DomElements = {
   dataKeyframes: HTMLElement;
   dataFormat: HTMLElement;
   bakeOperationRow: HTMLElement;
-  bakeFps: HTMLInputElement;
-  bakeFrameStep: HTMLInputElement;
-  bakeFrameStepNumber: HTMLInputElement;
+  bakeFps: HTMLSelectElement;
+  bakeFrameStep: HTMLSelectElement;
   bakeFrameMidLabel: HTMLElement;
   bakeFrameMaxLabel: HTMLElement;
   bakeApply: HTMLButtonElement;
@@ -92,9 +91,8 @@ export const dom: DomElements = {
   dataKeyframes: $<HTMLElement>('#data-keyframes'),
   dataFormat: $<HTMLElement>('#data-format'),
   bakeOperationRow: $<HTMLElement>('#bake-operation-row'),
-  bakeFps: $<HTMLInputElement>('#bake-fps'),
-  bakeFrameStep: $<HTMLInputElement>('#bake-frame-step'),
-  bakeFrameStepNumber: $<HTMLInputElement>('#bake-frame-step-number'),
+  bakeFps: $<HTMLSelectElement>('#bake-fps'),
+  bakeFrameStep: $<HTMLSelectElement>('#bake-frame-step'),
   bakeFrameMidLabel: $<HTMLElement>('#bake-frame-mid-label'),
   bakeFrameMaxLabel: $<HTMLElement>('#bake-frame-max-label'),
   bakeApply: $<HTMLButtonElement>('#bake-apply-button'),

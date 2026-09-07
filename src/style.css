@@ -54,7 +54,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -63,7 +64,8 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
 }
@@ -95,7 +97,6 @@ input:focus-visible {
 .transport-readout,
 .data-grid span,
 .slider-label,
-.slider-scale,
 .track-label-head,
 .track-label small,
 .asset-meta,
@@ -374,6 +375,22 @@ input:focus-visible {
 
 .section-label > span:first-child::first-letter {
   color: var(--cyan);
+}
+
+.bake-operation-label {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.bake-operation-lead {
+  margin: 0;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
 }
 
 .drop-card,
@@ -1201,7 +1218,7 @@ input:focus-visible {
 .bake-actions {
   justify-content: flex-end;
   width: 100%;
-  margin-top: 8px;
+  margin-top: 16px;
 }
 
 .apply-button {
@@ -1256,19 +1273,6 @@ input:focus-visible {
   opacity: 0.32;
 }
 
-.slider-row {
-  padding: 4px 0 14px;
-}
-
-.slider-heading {
-  display: block;
-  margin-bottom: 2px;
-  color: var(--text-dim);
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-}
-
 .slider-label {
   justify-content: space-between;
   color: var(--text-dim);
@@ -1283,7 +1287,8 @@ input:focus-visible {
 
 .bake-frame-settings {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
   gap: 8px;
   padding: 4px 0 1px;
 }
@@ -1300,7 +1305,7 @@ input:focus-visible {
 }
 
 .bake-fps-input,
-.frame-step-number {
+.frame-step-select {
   height: 24px;
   color: var(--cyan);
   border: 1px solid rgba(102, 230, 221, 0.35);
@@ -1310,33 +1315,30 @@ input:focus-visible {
 }
 
 .bake-fps-input {
-  width: 100%;
-  padding: 0 5px;
+  width: 68px;
+  padding: 0 3px;
+}
+
+.frame-step-setting {
+  justify-content: flex-end;
 }
 
 .frame-step-readout {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
+  white-space: nowrap;
 }
 
-.frame-step-number {
-  width: 54px;
-  padding: 0 5px;
-  text-align: right;
+.frame-step-select {
+  width: 48px;
+  padding: 0 3px;
 }
 
 .bake-fps-input:disabled,
-.frame-step-number:disabled {
+.frame-step-select:disabled {
   cursor: not-allowed;
   opacity: 0.32;
-}
-
-.frame-step-number::-webkit-inner-spin-button,
-.frame-step-number::-webkit-outer-spin-button,
-.bake-fps-input::-webkit-inner-spin-button,
-.bake-fps-input::-webkit-outer-spin-button {
-  opacity: 0.7;
 }
 
 input[type='range'] {
@@ -1381,33 +1383,6 @@ input[type='range']::-moz-range-thumb {
   border: 0;
   border-radius: 50%;
   background: var(--cyan);
-}
-
-.slider-scale {
-  display: flex;
-  justify-content: space-between;
-  color: var(--text-dim);
-  font-size: 10px;
-}
-
-.bake-frame-step-control input[type='range']::-webkit-slider-runnable-track {
-  background: linear-gradient(90deg, var(--cyan-deep), rgba(185, 216, 237, 0.14));
-}
-
-.bake-frame-step-control input[type='range']::-moz-range-track {
-  background: linear-gradient(90deg, var(--cyan-deep), rgba(185, 216, 237, 0.14));
-}
-
-.frame-step-scale span:first-child {
-  color: var(--cyan);
-}
-
-.frame-step-scale span:nth-child(2) {
-  color: var(--text-dim);
-}
-
-.frame-step-scale span:last-child {
-  color: var(--text-dim);
 }
 
 .export-section {
@@ -1963,7 +1938,6 @@ input[type='range']::-moz-range-thumb {
 .ready-pill,
 .data-grid span,
 .slider-label,
-.slider-scale,
 .viewport-zoom-label,
 .ruler-mark {
   font-size: 10px;
@@ -2000,7 +1974,7 @@ input[type='range']::-moz-range-thumb {
   font-size: 10px;
 }
 
-.frame-step-number {
+.frame-step-select {
   font-size: 10px;
 }
 

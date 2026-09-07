@@ -112,19 +112,15 @@
           </section>
 
           <section class="inspector-section tuning-section">
-            <div class="section-label" id="bake-operation-row">
+            <div class="section-label bake-operation-label" id="bake-operation-row">
               <span>固定フレーム間隔で<br />キーフレームをベイク</span>
+              <p class="bake-operation-lead">Frame Stepはキーフレームの間隔です。値が大きいほどファイル容量を抑えられますが、細かな動きが失われる場合があります。</p>
             </div>
             <div class="bake-frame-settings">
-              <label class="frame-setting"><span>BAKE FPS</span><input class="bake-fps-input" id="bake-fps" type="number" min="1" max="240" value="30" step="1" inputmode="numeric" aria-label="ベイクするFPS" /></label>
-              <label class="frame-setting"><span>DIVISIONS / SEC</span><span class="frame-step-readout"><input class="frame-step-number" id="bake-frame-step-number" type="number" min="1" max="30" value="1" step="1" aria-label="1秒あたりの分割数" /><strong>DIVISIONS</strong></span></label>
+              <label class="frame-setting"><span>BAKE FPS</span><select class="bake-fps-input" id="bake-fps" aria-label="ベイクするFPS"><option value="30">30</option></select></label>
+              <label class="frame-setting frame-step-setting"><span>FRAME STEP</span><span class="frame-step-readout"><span>Every</span><select class="frame-step-select" id="bake-frame-step" aria-label="キーフレームを打つフレーム間隔"><option value="1">1</option></select><strong>frame</strong></span></label>
             </div>
-            <div class="slider-row bake-frame-step-control">
-              <span class="slider-heading">DIVISION</span>
-              <input id="bake-frame-step" type="range" min="1" max="30" value="1" step="1" aria-label="1秒あたりの分割数" />
-              <div class="slider-scale frame-step-scale"><span>1</span><span id="bake-frame-mid-label">15</span><span id="bake-frame-max-label">30</span></div>
-            </div>
-            <div class="operation-actions bake-actions"><button class="apply-button" id="bake-apply-button" type="button" disabled>APPLY</button><button class="cancel-button" id="bake-cancel-button" type="button" disabled>CANCEL</button><button class="revert-button" id="bake-revert-button" type="button" disabled>REVERT</button></div>
+            <div class="operation-actions bake-actions"><button class="apply-button" id="bake-apply-button" type="button" disabled>APPLY</button><button class="cancel-button" id="bake-cancel-button" type="button" disabled>CANCEL</button><button class="revert-button" id="bake-revert-button" type="button" disabled>RESTORE</button></div>
           </section>
 
           <section class="inspector-section export-section">

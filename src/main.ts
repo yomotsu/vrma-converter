@@ -52,7 +52,6 @@ const MIN_BAKE_FPS = 1;
 const MAX_BAKE_FPS = 240;
 const DEFAULT_BAKE_FPS = 30;
 const MIN_BAKE_FRAME_STEP = 1;
-const MAX_BAKE_FRAME_STEP = 120;
 const TIMELINE_AUTO_SCROLL_EDGE = 48;
 const TIMELINE_AUTO_SCROLL_MAX_SPEED = 14;
 
@@ -154,6 +153,28 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function populateBakeFpsOptions(): void {
+  dom.bakeFps.replaceChildren();
+  for (let fps = MIN_BAKE_FPS; fps <= MAX_BAKE_FPS; fps += 1) {
+    const option = document.createElement('option');
+    option.value = fps.toString();
+    option.textContent = fps.toString();
+    dom.bakeFps.append(option);
+  }
+  dom.bakeFps.value = DEFAULT_BAKE_FPS.toString();
+}
+
+function populateBakeFrameStepOptions(maxFrameStep: number, selectedFrameStep: number): void {
+  dom.bakeFrameStep.replaceChildren();
+  for (let frameStep = MIN_BAKE_FRAME_STEP; frameStep <= maxFrameStep; frameStep += 1) {
+    const option = document.createElement('option');
+    option.value = frameStep.toString();
+    option.textContent = frameStep.toString();
+    dom.bakeFrameStep.append(option);
+  }
+  dom.bakeFrameStep.value = selectedFrameStep.toString();
+}
+
 async function loadVrmUrl(url: string, name: string, source: ModelState['source'], objectUrl?: string): Promise<void> {
   const previousModel = state.model;
   setLoading(true, 'LOADING VRM AVATAR');
@@ -201,14 +222,12 @@ function copyTrackInterpolation(source: THREE.KeyframeTrack, target: THREE.Keyfr
 function setBakeSettings(fpsValue: number, frameStepValue: number): void {
   if (!Number.isFinite(fpsValue) || !Number.isFinite(frameStepValue)) return;
   const fps = normalizeBakeFps(fpsValue);
-  const frameStep = Math.round(clamp(frameStepValue, MIN_BAKE_FRAME_STEP, maxBakeFrameStepForFps(fps)));
+  const maxFrameStep = maxBakeFrameStepForFps(fps);
+  const frameStep = Math.round(clamp(frameStepValue, MIN_BAKE_FRAME_STEP, maxFrameStep));
   state.bakeFps = fps;
   state.bakeFrameStep = frameStep;
   dom.bakeFps.value = fps.toString();
-  dom.bakeFrameStep.max = maxBakeFrameStepForFps(fps).toString();
-  dom.bakeFrameStepNumber.max = maxBakeFrameStepForFps(fps).toString();
-  dom.bakeFrameStep.value = frameStep.toString();
-  dom.bakeFrameStepNumber.value = frameStep.toString();
+  populateBakeFrameStepOptions(maxFrameStep, frameStep);
   const animation = state.animation;
   if (animation == null || !animation.compatible) return;
   animation.bakePreview = { fps, frameStep };
@@ -721,7 +740,6 @@ function updateInterface(): void {
     dom.speedOperationRow.classList.toggle('locked', !canTune);
     dom.bakeFps.disabled = !canTune;
     dom.bakeFrameStep.disabled = !canTune;
-    dom.bakeFrameStepNumber.disabled = !canTune;
     dom.bakeApply.disabled = !canTune || !hasBakePreview;
     dom.bakeCancel.disabled = !canTune || !hasBakePreview;
     dom.bakeRevert.disabled = !canTune || !hasBakeChanges;
@@ -738,7 +756,6 @@ function updateInterface(): void {
     dom.speedOperationRow.classList.add('locked');
     dom.bakeFps.disabled = true;
     dom.bakeFrameStep.disabled = true;
-    dom.bakeFrameStepNumber.disabled = true;
     dom.bakeApply.disabled = true;
     dom.bakeCancel.disabled = true;
     dom.bakeRevert.disabled = true;
@@ -750,12 +767,7 @@ function updateInterface(): void {
   dom.speedMultiplierValue.textContent = formatSpeedMultiplier(state.speedMultiplier);
   dom.bakeFps.value = state.bakeFps.toString();
   const maxFrameStep = maxBakeFrameStepForFps(state.bakeFps);
-  dom.bakeFrameStep.max = maxFrameStep.toString();
-  dom.bakeFrameStepNumber.max = maxFrameStep.toString();
-  dom.bakeFrameStep.value = state.bakeFrameStep.toString();
-  dom.bakeFrameStepNumber.value = state.bakeFrameStep.toString();
-  dom.bakeFrameMidLabel.textContent = `${Math.ceil(maxFrameStep / 2)}`;
-  dom.bakeFrameMaxLabel.textContent = `${maxFrameStep}`;
+  populateBakeFrameStepOptions(maxFrameStep, state.bakeFrameStep);
   timeline.updatePlayhead();
 }
 
@@ -940,16 +952,10 @@ function bindEvents(): void {
     if (animation == null || !animation.compatible) return;
     setBakeSettings(Number(dom.bakeFps.value), state.bakeFrameStep);
   });
-  dom.bakeFrameStep.addEventListener('input', () => {
+  dom.bakeFrameStep.addEventListener('change', () => {
     const animation = state.animation;
     if (animation == null || !animation.compatible) return;
     setBakeFrameStepValue(Number(dom.bakeFrameStep.value));
-  });
-  dom.bakeFrameStepNumber.addEventListener('input', () => {
-    if (dom.bakeFrameStepNumber.value.trim() === '') return;
-    const value = Number(dom.bakeFrameStepNumber.value);
-    if (!Number.isFinite(value)) return;
-    setBakeFrameStepValue(value);
   });
   dom.bakeApply.addEventListener('click', applyBake);
   dom.bakeCancel.addEventListener('click', cancelBake);
@@ -1063,6 +1069,7 @@ function animate(): void {
 }
 
 async function bootstrap(): Promise<void> {
+  populateBakeFpsOptions();
   bindEvents();
   installAlwaysVisibleScrollbars({
     sidebarTargets: document.querySelectorAll<HTMLElement>('.sidebar'),

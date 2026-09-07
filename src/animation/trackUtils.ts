@@ -5,7 +5,6 @@ const MIN_BAKE_FPS = 1;
 const MAX_BAKE_FPS = 240;
 const DEFAULT_BAKE_FPS = 30;
 const MIN_BAKE_FRAME_STEP = 1;
-const MAX_BAKE_FRAME_STEP = 120;
 
 export function setTrack(set: MotionTrackSet, bone: BoneName, path: TrackPath, track: THREE.KeyframeTrack): void {
   const current = set.get(bone) ?? {};
@@ -67,17 +66,18 @@ export function normalizeBakeFps(value: number): number {
 }
 
 export function maxBakeFrameStepForFps(fps: number): number {
-  return Math.max(MIN_BAKE_FRAME_STEP, Math.min(MAX_BAKE_FRAME_STEP, Math.floor(normalizeBakeFps(fps))));
+  return normalizeBakeFps(fps);
 }
 
 export function fixedBakeTimes(duration: number, fps: number, frameStep: number, preservedTimes: number[] = []): number[] {
   const safeDuration = Math.max(0, duration);
   const safeFps = normalizeBakeFps(fps);
-  const safeDivisionCount = Math.round(Math.max(MIN_BAKE_FRAME_STEP, Math.min(maxBakeFrameStepForFps(safeFps), frameStep)));
+  const safeFrameStep = Math.round(Math.max(MIN_BAKE_FRAME_STEP, Math.min(maxBakeFrameStepForFps(safeFps), frameStep)));
   if (safeDuration <= 0) return [0];
-  const frameInterval = safeFps / safeDivisionCount;
-  const stepCount = Math.floor((safeDuration * safeFps + 0.000001) / frameInterval);
-  const times = Array.from({ length: stepCount + 1 }, (_, index) => Math.min(safeDuration, Number(((index * frameInterval) / safeFps).toFixed(6))));
+  const frameInterval = safeFrameStep / safeFps;
+  const frameCount = Math.floor(safeDuration * safeFps + 0.000001);
+  const stepCount = Math.floor(frameCount / safeFrameStep);
+  const times = Array.from({ length: stepCount + 1 }, (_, index) => Math.min(safeDuration, Number((index * frameInterval).toFixed(6))));
   const preserved = preservedTimes
     .filter((time) => Number.isFinite(time))
     .map((time) => Math.max(0, Math.min(safeDuration, time)))
