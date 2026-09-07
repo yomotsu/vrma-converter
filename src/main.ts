@@ -23,6 +23,8 @@ import type { AnimationRigType } from './animation/rigMapping.js';
 import { isSupportedAnimationFormat, parseAnimationFile } from './animation/parseAnimationFile.js';
 import { createPreviewAnimation } from './animation/previewAnimation.js';
 import { createVrmaBlob } from './vrma/exportVrma.js';
+import { dom } from './ui/dom.js';
+import { installAlwaysVisibleScrollbars } from './ui/scrollbars.js';
 import {
   cloneExpressionTrackSet,
   cloneTrackSet,
@@ -62,218 +64,6 @@ type ModelState = {
   objectUrl?: string;
   height: number;
 };
-
-const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
-
-const dom = {
-  viewport: $<HTMLCanvasElement>('#viewport'),
-  overlayCanvas: $<HTMLCanvasElement>('#overlay-canvas'),
-  viewportShell: $<HTMLElement>('#viewport-shell'),
-  loading: $<HTMLElement>('#loading-overlay'),
-  loadingLabel: $<HTMLElement>('#loading-label'),
-  modelDrop: $<HTMLButtonElement>('#model-drop'),
-  modelInput: $<HTMLInputElement>('#vrm-file-input'),
-  animationDrop: $<HTMLButtonElement>('#animation-drop'),
-  animationInput: $<HTMLInputElement>('#animation-file-input'),
-  assetList: $<HTMLElement>('#asset-list'),
-  modelName: $<HTMLElement>('#model-name'),
-  modelStatus: $<HTMLElement>('#model-status'),
-  bonesReadout: $<HTMLElement>('#readout-bones'),
-  queueCount: $<HTMLElement>('#queue-count'),
-  dataDuration: $<HTMLElement>('#data-duration'),
-  dataKeyframes: $<HTMLElement>('#data-keyframes'),
-  dataFormat: $<HTMLElement>('#data-format'),
-  bakeOperationRow: $<HTMLElement>('#bake-operation-row'),
-  bakeFps: $<HTMLInputElement>('#bake-fps'),
-  bakeFrameStep: $<HTMLInputElement>('#bake-frame-step'),
-  bakeFrameStepNumber: $<HTMLInputElement>('#bake-frame-step-number'),
-  bakeFrameMidLabel: $<HTMLElement>('#bake-frame-mid-label'),
-  bakeFrameMaxLabel: $<HTMLElement>('#bake-frame-max-label'),
-  bakeApply: $<HTMLButtonElement>('#bake-apply-button'),
-  bakeCancel: $<HTMLButtonElement>('#bake-cancel-button'),
-  bakeRevert: $<HTMLButtonElement>('#bake-revert-button'),
-  download: $<HTMLButtonElement>('#download-button'),
-  downloadName: $<HTMLElement>('#download-name'),
-  downloadSize: $<HTMLElement>('#download-size'),
-  speedOperationRow: $<HTMLElement>('#speed-operation-row'),
-  speedMultiplier: $<HTMLInputElement>('#speed-multiplier'),
-  speedMultiplierValue: $<HTMLElement>('#speed-multiplier-value'),
-  play: $<HTMLButtonElement>('#play-button'),
-  playIcon: $<HTMLElement>('#play-icon'),
-  currentFrame: $<HTMLElement>('#current-frame'),
-  totalFrames: $<HTMLElement>('#total-frames'),
-  currentTime: $<HTMLElement>('#current-time'),
-  previousFrame: $<HTMLButtonElement>('#previous-frame-button'),
-  nextFrame: $<HTMLButtonElement>('#next-frame-button'),
-  viewportBackgroundButton: $<HTMLButtonElement>('#viewport-background-button'),
-  resetView: $<HTMLButtonElement>('#reset-view-button'),
-  viewportZoomOutButton: $<HTMLButtonElement>('#viewport-zoom-out-button'),
-  viewportZoomButton: $<HTMLButtonElement>('#viewport-zoom-button'),
-  viewportZoomRange: $<HTMLInputElement>('#viewport-zoom-range'),
-  timelineRuler: $<HTMLElement>('#timeline-ruler'),
-  timelineRulerSticky: $<HTMLElement>('#timeline-ruler-sticky'),
-  timelineBody: $<HTMLElement>('#timeline-body'),
-  timelineScroll: $<HTMLElement>('#timeline-scroll'),
-  timelineScrollContent: $<HTMLElement>('#timeline-scroll-content'),
-  trackLanes: $<HTMLElement>('#track-lanes'),
-  transformsToggle: $<HTMLButtonElement>('#transforms-toggle'),
-  transformBoneLabels: $<HTMLElement>('#transform-bone-labels'),
-  transformBoneLanes: $<HTMLElement>('#transform-bone-lanes'),
-  transformsKeys: $<HTMLElement>('#transforms-keys'),
-  faceKeys: $<HTMLElement>('#face-keys'),
-  playhead: $<HTMLElement>('#playhead'),
-  zoomIn: $<HTMLButtonElement>('#zoom-in-button'),
-  zoomOut: $<HTMLButtonElement>('#zoom-out-button'),
-  toast: $<HTMLElement>('#toast'),
-  toastMessage: $<HTMLElement>('#toast-message'),
-  fbxRigDialog: $<HTMLDialogElement>('#fbx-rig-dialog'),
-  fbxRigFileName: $<HTMLElement>('#fbx-rig-file-name'),
-};
-
-type ScrollbarAxis = 'vertical' | 'horizontal';
-type AlwaysScrollbar = {
-  target: HTMLElement;
-  axis: ScrollbarAxis;
-  track: HTMLDivElement;
-  thumb: HTMLDivElement;
-};
-
-const alwaysScrollbars: AlwaysScrollbar[] = [];
-let alwaysScrollbarRefreshFrame: number | null = null;
-
-function scrollbarPointerPosition(event: PointerEvent, axis: ScrollbarAxis): number {
-  return axis === 'vertical' ? event.clientY : event.clientX;
-}
-
-function scrollbarScrollPosition(scrollbar: AlwaysScrollbar): number {
-  return scrollbar.axis === 'vertical' ? scrollbar.target.scrollTop : scrollbar.target.scrollLeft;
-}
-
-function setScrollbarScrollPosition(scrollbar: AlwaysScrollbar, value: number): void {
-  if (scrollbar.axis === 'vertical') {
-    scrollbar.target.scrollTop = value;
-  } else {
-    scrollbar.target.scrollLeft = value;
-  }
-}
-
-function refreshAlwaysScrollbar(scrollbar: AlwaysScrollbar): void {
-  const { target, axis, track, thumb } = scrollbar;
-  const rect = target.getBoundingClientRect();
-  const visibleBodyRect = axis === 'horizontal' && target === dom.timelineScroll
-    ? dom.timelineBody.getBoundingClientRect()
-    : rect;
-  const viewportSize = axis === 'vertical' ? target.clientHeight : target.clientWidth;
-  const contentSize = axis === 'vertical' ? target.scrollHeight : target.scrollWidth;
-  const trackSize = axis === 'vertical' ? rect.height : rect.width;
-  if (viewportSize <= 0 || contentSize <= viewportSize + 1 || trackSize <= 0) {
-    track.hidden = true;
-    return;
-  }
-
-  const thickness = 10;
-  const thumbSize = clamp(Math.round((trackSize * viewportSize) / contentSize), 24, trackSize);
-  const maxThumbOffset = Math.max(0, trackSize - thumbSize);
-  const maxScroll = Math.max(0, contentSize - viewportSize);
-  const thumbOffset = maxScroll === 0 ? 0 : (scrollbarScrollPosition(scrollbar) / maxScroll) * maxThumbOffset;
-  track.hidden = false;
-  if (axis === 'vertical') {
-    track.style.left = `${Math.round(rect.right - thickness)}px`;
-    track.style.top = `${Math.round(rect.top)}px`;
-    track.style.width = `${thickness}px`;
-    track.style.height = `${Math.round(rect.height)}px`;
-    thumb.style.left = '0';
-    thumb.style.top = `${Math.round(thumbOffset)}px`;
-    thumb.style.width = '100%';
-    thumb.style.height = `${thumbSize}px`;
-  } else {
-    track.style.left = `${Math.round(rect.left)}px`;
-    track.style.top = `${Math.round(visibleBodyRect.bottom - thickness)}px`;
-    track.style.width = `${Math.round(rect.width)}px`;
-    track.style.height = `${thickness}px`;
-    thumb.style.left = `${Math.round(thumbOffset)}px`;
-    thumb.style.top = '0';
-    thumb.style.width = `${thumbSize}px`;
-    thumb.style.height = '100%';
-  }
-}
-
-function refreshAlwaysScrollbars(): void {
-  alwaysScrollbarRefreshFrame = null;
-  alwaysScrollbars.forEach(refreshAlwaysScrollbar);
-}
-
-function scheduleAlwaysScrollbarRefresh(): void {
-  if (alwaysScrollbarRefreshFrame != null) return;
-  alwaysScrollbarRefreshFrame = window.requestAnimationFrame(refreshAlwaysScrollbars);
-}
-
-function createAlwaysScrollbar(target: HTMLElement, axis: ScrollbarAxis): void {
-  const track = document.createElement('div');
-  track.className = `always-scrollbar ${axis}`;
-  track.hidden = true;
-  track.setAttribute('aria-hidden', 'true');
-  const thumb = document.createElement('div');
-  thumb.className = 'always-scrollbar-thumb';
-  track.append(thumb);
-  document.body.append(track);
-  const scrollbar: AlwaysScrollbar = { target, axis, track, thumb };
-  alwaysScrollbars.push(scrollbar);
-
-  thumb.addEventListener('pointerdown', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const startPointer = scrollbarPointerPosition(event, axis);
-    const startScroll = scrollbarScrollPosition(scrollbar);
-    const trackRect = track.getBoundingClientRect();
-    const thumbRect = thumb.getBoundingClientRect();
-    const trackSize = axis === 'vertical' ? trackRect.height : trackRect.width;
-    const thumbSize = axis === 'vertical' ? thumbRect.height : thumbRect.width;
-    const maxThumbOffset = Math.max(0, trackSize - thumbSize);
-    const viewportSize = axis === 'vertical' ? target.clientHeight : target.clientWidth;
-    const contentSize = axis === 'vertical' ? target.scrollHeight : target.scrollWidth;
-    const maxScroll = Math.max(0, contentSize - viewportSize);
-    if (maxThumbOffset <= 0 || maxScroll <= 0) return;
-
-    const move = (moveEvent: PointerEvent): void => {
-      const delta = scrollbarPointerPosition(moveEvent, axis) - startPointer;
-      setScrollbarScrollPosition(scrollbar, startScroll + (delta / maxThumbOffset) * maxScroll);
-      scheduleAlwaysScrollbarRefresh();
-    };
-    const stop = (): void => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', stop);
-      window.removeEventListener('pointercancel', stop);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', stop);
-    window.addEventListener('pointercancel', stop);
-  });
-
-  track.addEventListener('pointerdown', (event) => {
-    if (event.target === thumb) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const pointer = scrollbarPointerPosition(event, axis);
-    const thumbRect = thumb.getBoundingClientRect();
-    const viewportSize = axis === 'vertical' ? target.clientHeight : target.clientWidth;
-    const direction = pointer < (axis === 'vertical' ? thumbRect.top : thumbRect.left) ? -1 : 1;
-    setScrollbarScrollPosition(scrollbar, scrollbarScrollPosition(scrollbar) + direction * viewportSize);
-    scheduleAlwaysScrollbarRefresh();
-  });
-
-  target.addEventListener('scroll', scheduleAlwaysScrollbarRefresh, { passive: true });
-  const observer = new MutationObserver(scheduleAlwaysScrollbarRefresh);
-  observer.observe(target, { attributes: true, childList: true, subtree: true });
-}
-
-function installAlwaysVisibleScrollbars(): void {
-  document.querySelectorAll<HTMLElement>('.sidebar').forEach((sidebar) => createAlwaysScrollbar(sidebar, 'vertical'));
-  createAlwaysScrollbar(dom.timelineBody, 'vertical');
-  createAlwaysScrollbar(dom.timelineScroll, 'horizontal');
-  window.addEventListener('resize', scheduleAlwaysScrollbarRefresh);
-  scheduleAlwaysScrollbarRefresh();
-}
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x07111c, 0.055);
@@ -1707,11 +1497,9 @@ function bindEvents(): void {
   });
   dom.timelineBody.addEventListener('scroll', () => {
     updateStickyTimelineRuler();
-    scheduleAlwaysScrollbarRefresh();
   }, { passive: true });
   dom.timelineScroll.addEventListener('scroll', () => {
     updateStickyTimelineRuler();
-    scheduleAlwaysScrollbarRefresh();
   }, { passive: true });
   dom.viewport.addEventListener('contextmenu', (event) => event.preventDefault());
   // OrbitControls normally consumes wheel events for dolly. Keep pinch-to-zoom,
@@ -1858,7 +1646,11 @@ function animate(): void {
 
 async function bootstrap(): Promise<void> {
   bindEvents();
-  installAlwaysVisibleScrollbars();
+  installAlwaysVisibleScrollbars({
+    sidebarTargets: document.querySelectorAll<HTMLElement>('.sidebar'),
+    timelineBody: dom.timelineBody,
+    timelineScroll: dom.timelineScroll,
+  });
   resizeRenderer();
   installPreview();
   animate();
