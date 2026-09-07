@@ -1,14 +1,11 @@
 import './style.css';
 
 import * as THREE from 'three';
-import { BVHLoader } from 'three/examples/jsm/loaders/BVHLoader.js';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import type { VRM } from '@pixiv/three-vrm';
 import { VRMAnimationLoaderPlugin, VRMLookAtQuaternionProxy } from '@pixiv/three-vrm-animation';
-import type { VRMAnimation } from '@pixiv/three-vrm-animation';
 import defaultVrmUrl from '../assets/model.vrm?url';
 import defaultMmdModelUrl from '../assets/mobuko.pmx?url';
 import {
@@ -21,16 +18,9 @@ import {
 import type { MMDMotionBakeResult } from './mmd/index.js';
 import { getTimelineScrollLeftForPlayhead } from './timelineScroll.js';
 import type { AnimationState, BoneName, BakeSettings, ExpressionTrackSet, LoadedClip, MotionTrackSet, TrackPath } from './animation/types.js';
-import {
-  detectAnimationRig,
-  HUMAN_BONES,
-} from './animation/rigMapping.js';
+import { HUMAN_BONES } from './animation/rigMapping.js';
 import type { AnimationRigType } from './animation/rigMapping.js';
-import { retargetMixamoClip } from './animation/mixamoParser.js';
-import { retargetUniversalClip } from './animation/universalParser.js';
-import { isDazFriendlyBvh, retargetDazBvhClip } from './animation/bvhParser.js';
-import { retargetGenericClip } from './animation/genericParser.js';
-import { tracksFromVrma } from './animation/vrmaParser.js';
+import { isSupportedAnimationFormat, parseAnimationFile } from './animation/parseAnimationFile.js';
 import {
   cloneExpressionTrackSet,
   cloneTrackSet,
@@ -388,8 +378,6 @@ const gltfLoader = new GLTFLoader();
 gltfLoader.crossOrigin = 'anonymous';
 gltfLoader.register((parser) => new VRMLoaderPlugin(parser));
 gltfLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
-const fbxLoader = new FBXLoader();
-const bvhLoader = new BVHLoader();
 dom.overlayCanvas.hidden = !MMD_PREVIEW_ENABLED;
 const mmdPlayer = MMD_PREVIEW_ENABLED
   ? new MMDPlayer(dom.overlayCanvas, { modelUrl: defaultMmdModelUrl })
@@ -957,107 +945,6 @@ function loadedClipFromMmdBake(result: MMDMotionBakeResult, targetVrm: VRM | nul
   };
 }
 
-function estimateFps(clip: THREE.AnimationClip, duration: number): number {
-  const firstTrack = clip.tracks[0];
-  if (firstTrack == null || duration <= 0) return 30;
-  for (let index = 1; index < firstTrack.times.length; index += 1) {
-    const frameInterval = firstTrack.times[index] - firstTrack.times[index - 1];
-    if (frameInterval > 0.000001) return clamp(Math.round(1 / frameInterval), 1, 240);
-  }
-  return clamp(Math.round(firstTrack.times.length / duration), 1, 240);
-}
-
-function labelForClip(clip: THREE.AnimationClip | undefined, index: number): string {
-  const name = clip?.name?.trim();
-  return name != null && name.length > 0 && name !== 'animation' ? name : `Take ${formatFrame(index + 1)}`;
-}
-
-async function parseAnimationFile(file: File, targetVrm: VRM | null): Promise<LoadedClip[]> {
-  const format = extensionOf(file.name);
-  const url = URL.createObjectURL(file);
-  try {
-    if (format === 'fbx') {
-      const source = await fbxLoader.loadAsync(url);
-      if (source.animations.length === 0) throw new Error('FBX にアニメーションクリップがありません');
-      const rigType = detectAnimationRig(source) ?? await chooseFbxRigType(file.name);
-      if (rigType == null) throw new Error('FBX のリグ形式の選択をキャンセルしました');
-      return source.animations.map((clip, index) => {
-        const retargeted = rigType === 'mixamo'
-          ? retargetMixamoClip(source, clip, targetVrm)
-          : retargetUniversalClip(source, clip, targetVrm);
-        return {
-          tracks: retargeted.tracks,
-          expressionTracks: emptyExpressionTrackSet(),
-          lookAtTrack: null,
-          duration: clip.duration,
-          sourceFps: estimateFps(clip, clip.duration),
-          restHipsY: retargeted.restHipsY,
-          clipName: labelForClip(clip, index),
-          compatible: retargeted.tracks.size > 0,
-        };
-      });
-    }
-    if (format === 'bvh') {
-      const result = bvhLoader.parse(new TextDecoder().decode(await file.arrayBuffer()));
-      const clip = result.clip;
-      if (clip == null) throw new Error('BVH にアニメーションデータがありません');
-      const dazFriendly = isDazFriendlyBvh(result.skeleton);
-      const retargeted = dazFriendly ? retargetDazBvhClip(result.skeleton, clip, targetVrm) : null;
-      const tracks = retargeted?.tracks ?? retargetGenericClip(clip);
-      return [{
-        tracks,
-        expressionTracks: emptyExpressionTrackSet(),
-        lookAtTrack: null,
-        duration: clip.duration,
-        sourceFps: estimateFps(clip, clip.duration),
-        restHipsY: retargeted?.restHipsY ?? 1,
-        clipName: labelForClip(clip, 0),
-        compatible: tracks.size > 0,
-      }];
-    }
-    const gltf = await gltfLoader.loadAsync(url);
-    const vrmAnimations = (gltf.userData as { vrmAnimations?: VRMAnimation[] }).vrmAnimations;
-    if (vrmAnimations != null && vrmAnimations.length > 0) {
-      return vrmAnimations.map((animation, index) => {
-        const clip = gltf.animations[index];
-        const loadedTracks = tracksFromVrma(animation);
-        return {
-          tracks: loadedTracks.tracks,
-          expressionTracks: loadedTracks.expressionTracks,
-          lookAtTrack: loadedTracks.lookAtTrack,
-          duration: animation.duration || clip?.duration || 0,
-          sourceFps: clip == null ? 30 : estimateFps(clip, animation.duration || clip.duration),
-          restHipsY: Math.abs(animation.restHipsPosition.y) || 1,
-          clipName: labelForClip(clip, index),
-          compatible: loadedTracks.tracks.size > 0 || loadedTracks.expressionTracks.preset.size > 0 || loadedTracks.expressionTracks.custom.size > 0,
-        };
-      });
-    }
-    if (gltf.animations.length === 0) throw new Error('GLB / GLTF にアニメーションクリップがありません');
-    const rigType = detectAnimationRig(gltf.scene);
-    return gltf.animations.map((clip, index) => {
-      const retargeted = rigType === 'mixamo'
-        ? retargetMixamoClip(gltf.scene, clip, targetVrm)
-        : rigType === 'universal'
-          ? retargetUniversalClip(gltf.scene, clip, targetVrm)
-          : null;
-      const tracks = retargeted?.tracks ?? retargetGenericClip(clip);
-      return {
-        tracks,
-        expressionTracks: emptyExpressionTrackSet(),
-        lookAtTrack: null,
-        duration: clip.duration,
-        sourceFps: estimateFps(clip, clip.duration),
-        restHipsY: retargeted?.restHipsY ?? 1,
-        clipName: labelForClip(clip, index),
-        compatible: tracks.size > 0,
-      };
-    });
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 let animationSequence = 0;
 let animationRequestSequence = 0;
 
@@ -1264,14 +1151,16 @@ async function handleAnimationFile(file: File): Promise<void> {
     }
     return;
   }
-  if (!['vrma', 'glb', 'gltf', 'fbx', 'bvh'].includes(extension)) {
+  if (!isSupportedAnimationFormat(extension)) {
     setLoading(false);
     showToast('VRMA / GLB / GLTF / FBX / BVH / VMD を選択してください');
     return;
   }
   setLoading(true, 'RETARGETING MOTION');
   try {
-    const loadedClips = await parseAnimationFile(file, state.model?.vrm ?? null);
+    const loadedClips = await parseAnimationFile(file, state.model?.vrm ?? null, {
+      chooseFbxRigType,
+    });
     if (request !== animationRequestSequence) return;
     if (loadedClips.length === 0 || !loadedClips.some((clip) => clip.compatible)) throw new Error('対応する humanoid ボーンが見つかりませんでした');
     const addedAnimations = addLoadedAnimationClips(file, loadedClips, extension.toUpperCase());
