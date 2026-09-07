@@ -396,40 +396,68 @@ const rimLight = new THREE.PointLight(0x54d8d8, 5.5, 6, 2);
 rimLight.position.set(-2.2, 1.9, -1.5);
 scene.add(rimLight);
 
+const STAGE_SHADOW_FOOT_BONES: BoneName[] = ['leftFoot', 'leftToes', 'rightFoot', 'rightToes'];
+const STAGE_SHADOW_FOOT_WEIGHT_THRESHOLD = 0.2;
+const STAGE_GRID_SIZE = 7;
+const STAGE_GRID_DIVISIONS = 28;
+const STAGE_GRID_CELL_SIZE = STAGE_GRID_SIZE / STAGE_GRID_DIVISIONS;
+const STAGE_SHADOW_RADIUS_IN_GRID_CELLS = 5;
+const STAGE_RING_INNER_RADIUS_IN_GRID_CELLS = 5.9;
+const STAGE_RING_OUTER_RADIUS_IN_GRID_CELLS = 6;
+const STAGE_SHADOW_RADIUS = STAGE_GRID_CELL_SIZE * STAGE_SHADOW_RADIUS_IN_GRID_CELLS;
+const STAGE_RING_INNER_RADIUS = STAGE_RING_INNER_RADIUS_IN_GRID_CELLS / STAGE_SHADOW_RADIUS_IN_GRID_CELLS;
+const STAGE_RING_OUTER_RADIUS = STAGE_RING_OUTER_RADIUS_IN_GRID_CELLS / STAGE_SHADOW_RADIUS_IN_GRID_CELLS;
+const STAGE_FLOOR_DARK_MODE_COLOR = 0xffffff;
+const STAGE_FLOOR_LIGHT_MODE_COLOR = 0x0a242d;
+const STAGE_FLOOR_OPACITY = 0.22;
+const STAGE_GRID_DARK_MODE_COLORS = [0x4ba7ac, 0x235764] as const;
+const STAGE_GRID_LIGHT_MODE_COLORS = [0x2a6d71, 0x16333f] as const;
+const STAGE_GRID_DARK_MODE_OPACITY = 0.55;
+const STAGE_GRID_LIGHT_MODE_OPACITY = 0.28;
+
 const stageGroup = new THREE.Group();
 scene.add(stageGroup);
-const grid = new THREE.GridHelper(7, 28, 0x2a6d71, 0x16333f);
+const grid = new THREE.GridHelper(
+  STAGE_GRID_SIZE,
+  STAGE_GRID_DIVISIONS,
+  STAGE_GRID_DARK_MODE_COLORS[0],
+  STAGE_GRID_DARK_MODE_COLORS[1],
+);
 const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
-gridMaterials.forEach((material) => {
-  material.transparent = true;
-  material.opacity = 0.28;
-});
+function setStageGridAppearance(isLight: boolean): void {
+  const colors = isLight ? STAGE_GRID_LIGHT_MODE_COLORS : STAGE_GRID_DARK_MODE_COLORS;
+  const opacity = isLight ? STAGE_GRID_LIGHT_MODE_OPACITY : STAGE_GRID_DARK_MODE_OPACITY;
+  gridMaterials.forEach((material, index) => {
+    material.transparent = true;
+    material.opacity = opacity;
+    if (material instanceof THREE.LineBasicMaterial) material.color.set(colors[index] ?? colors[0]);
+  });
+}
+setStageGridAppearance(false);
 grid.position.y = 0.005;
 stageGroup.add(grid);
 
-const floor = new THREE.Mesh(
-  new THREE.CircleGeometry(1, 80),
-  new THREE.MeshBasicMaterial({ color: 0x0a242d, transparent: true, opacity: 0.37, side: THREE.DoubleSide }),
-);
+const floorMaterial = new THREE.MeshBasicMaterial({
+  color: STAGE_FLOOR_DARK_MODE_COLOR,
+  transparent: true,
+  opacity: STAGE_FLOOR_OPACITY,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+const floor = new THREE.Mesh(new THREE.CircleGeometry(1, 80), floorMaterial);
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = 0.01;
 floor.visible = false;
 stageGroup.add(floor);
 
 const floorRing = new THREE.Mesh(
-  new THREE.RingGeometry(2.1, 2.105, 96),
-  new THREE.MeshBasicMaterial({ color: 0x53cfc8, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
+  new THREE.RingGeometry(STAGE_RING_INNER_RADIUS, STAGE_RING_OUTER_RADIUS, 96),
+  new THREE.MeshBasicMaterial({ color: 0x53cfc8, opacity: 1, side: THREE.DoubleSide }),
 );
 floorRing.rotation.x = -Math.PI / 2;
 floorRing.position.y = 0.015;
 floorRing.visible = false;
 stageGroup.add(floorRing);
-
-const STAGE_SHADOW_FOOT_BONES: BoneName[] = ['leftFoot', 'leftToes', 'rightFoot', 'rightToes'];
-const STAGE_SHADOW_FOOT_WEIGHT_THRESHOLD = 0.2;
-const STAGE_SHADOW_MARGIN = 1.08;
-const STAGE_SHADOW_MIN_RADIUS = 0.06;
-const STAGE_SHADOW_SCALE = 1.5;
 
 const clock = new THREE.Clock();
 const gltfLoader = new GLTFLoader();
@@ -618,15 +646,13 @@ function updateStageShadow(model: ModelState | null): void {
     return;
   }
 
-  const width = Math.max(0, bounds.max.x - bounds.min.x);
-  const depth = Math.max(0, bounds.max.z - bounds.min.z);
-  const radius = Math.max(STAGE_SHADOW_MIN_RADIUS, Math.hypot(width, depth) * 0.5 * STAGE_SHADOW_MARGIN) * STAGE_SHADOW_SCALE;
+  const radius = STAGE_SHADOW_RADIUS;
   const centerX = (bounds.min.x + bounds.max.x) * 0.5;
   const centerZ = (bounds.min.z + bounds.max.z) * 0.5;
   const groundY = bounds.min.y + Math.max(0.001, radius * 0.02);
   floor.scale.setScalar(radius);
   floor.position.set(centerX, groundY, centerZ);
-  floorRing.scale.setScalar(radius / 2.1);
+  floorRing.scale.setScalar(radius);
   floorRing.position.set(centerX, groundY + Math.max(0.001, radius * 0.015), centerZ);
   floor.visible = true;
   floorRing.visible = true;
@@ -698,6 +724,9 @@ type ViewportBackground = 'dark' | 'light';
 function setViewportBackground(background: ViewportBackground): void {
   const isLight = background === 'light';
   dom.viewportShell.classList.toggle('light-background', isLight);
+  setStageGridAppearance(isLight);
+  floorMaterial.color.set(isLight ? STAGE_FLOOR_LIGHT_MODE_COLOR : STAGE_FLOOR_DARK_MODE_COLOR);
+  floorMaterial.opacity = STAGE_FLOOR_OPACITY;
   dom.viewportBackgroundButton.setAttribute('aria-pressed', String(isLight));
   const nextBackgroundLabel = isLight ? '黒っぽい背景に切り替え' : '白っぽい背景に切り替え';
   dom.viewportBackgroundButton.title = nextBackgroundLabel;
@@ -2673,7 +2702,7 @@ function createVrmaBlob(animation: AnimationState): Blob {
   const binary = new Uint8Array(binaryLength.length);
   binaryChunks.forEach(({ offset, data }) => binary.set(data, offset));
   const gltf = {
-    asset: { version: '2.0', generator: 'Motion Forge VRMA Converter' },
+    asset: { version: '2.0', generator: 'VRMA Converter' },
     scene: 0,
     scenes: [{ nodes: nodes.map((_, index) => index) }],
     nodes,

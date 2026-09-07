@@ -91,7 +91,6 @@ input:focus-visible {
   align-items: center;
 }
 
-.section-label,
 .format-row,
 .transport-readout,
 .data-grid span,
@@ -180,6 +179,8 @@ input:focus-visible {
 }
 
 .download-button.full {
+  position: sticky;
+  bottom: 0;
   width: 100%;
   min-height: 44px;
   padding: 7px 10px;
@@ -375,8 +376,7 @@ input:focus-visible {
   color: inherit;
 }
 
-.section-label > span:first-child::first-letter,
-.operation-heading-row .operation-copy strong::first-letter {
+.section-label > span:first-child::first-letter {
   color: var(--cyan);
 }
 
@@ -1039,20 +1039,6 @@ input:focus-visible {
   gap: 10px;
 }
 
-.operation-heading-row {
-  min-height: 0;
-  display: block;
-  margin: 0 4px 10px;
-}
-
-.operation-heading-row .operation-copy strong {
-  color: var(--text-soft);
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0.16em;
-}
-
 .operation-row.preview {
   margin-left: -8px;
   padding-left: 8px;
@@ -1062,24 +1048,6 @@ input:focus-visible {
 
 .operation-row.locked {
   opacity: 0.32;
-}
-
-.operation-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.operation-copy strong {
-  color: var(--text-soft);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.operation-copy small {
-  color: var(--text-dim);
-  font-size: 10px;
 }
 
 .operation-status {
@@ -1886,7 +1854,6 @@ input[type='range']::-moz-range-thumb {
 .transport-readout,
 .asset-copy strong,
 .track-label > span:not(.track-color),
-.operation-copy small,
 .zoom-label,
 .track-label-head {
   font-size: 10px;
@@ -1912,8 +1879,7 @@ input[type='range']::-moz-range-thumb {
 }
 
 .drop-card-copy strong,
-.motion-dropzone strong,
-.operation-copy strong {
+.motion-dropzone strong {
   font-size: 12px;
 }
 

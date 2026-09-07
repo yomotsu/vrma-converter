@@ -1,5 +1,5 @@
 {
-  "name": "motion-forge-vrma-converter",
+  "name": "vrma-converter",
   "private": true,
   "version": "0.1.0",
   "type": "module",

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#07111c" />
     <meta name="description" content="Mixamo and humanoid motion to VRMA converter" />
-    <title>Motion Forge — VRMA Converter</title>
+    <title>VRMA Converter</title>
   </head>
   <body>
     <div id="app">
@@ -38,7 +38,7 @@
               <span class="dropzone-plus">+</span>
               <strong>アニメーションをドロップ</strong>
               <small>Mixamo の FBX<br />Universal humanoid rig 対応 FBX<br />BVH / VRMA / VMD など</small>
-              <span class="format-row"><i>GLB</i><i>FBX</i><i>BVH</i><i>VRMA</i><i>VMD</i></span>
+              <span class="format-row"><i>VRMA</i><i>GLB</i><i>FBX</i><i>BVH</i><i>VMD</i></span>
               <span class="dropzone-arrow" aria-hidden="true">↗</span>
             </button>
             <input id="animation-file-input" class="visually-hidden" type="file" accept=".vrma,.glb,.gltf,.fbx,.bvh,.vmd,model/gltf-binary,model/gltf+json" />
@@ -90,8 +90,8 @@
           </section>
 
           <section class="inspector-section speed-section">
-            <div class="operation-row operation-heading-row" id="speed-operation-row">
-              <span class="operation-copy"><strong>速度倍率をVRMAに適用</strong></span>
+            <div class="section-label" id="speed-operation-row">
+              <span>速度倍率をVRMAに適用</span>
             </div>
             <div class="speed-setting-row">
               <label class="frame-setting speed-range-setting"><span class="speed-range-heading"><span>SPEED MULTIPLIER</span><strong id="speed-multiplier-value">1×</strong></span><input class="speed-multiplier-range" id="speed-multiplier" type="range" min="0.1" max="3" value="1" step="0.1" aria-label="速度倍率" /></label>
@@ -99,8 +99,8 @@
           </section>
 
           <section class="inspector-section tuning-section">
-            <div class="operation-row operation-heading-row" id="bake-operation-row">
-              <span class="operation-copy"><strong>固定フレーム間隔で<br />全transformをベイク</strong></span>
+            <div class="section-label" id="bake-operation-row">
+              <span>固定フレーム間隔で<br />キーフレームをベイク</span>
             </div>
             <div class="bake-frame-settings">
               <label class="frame-setting"><span>BAKE FPS</span><input class="bake-fps-input" id="bake-fps" type="number" min="1" max="240" value="30" step="1" inputmode="numeric" aria-label="ベイクするFPS" /></label>
