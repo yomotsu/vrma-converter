@@ -98,6 +98,7 @@ const state: {
   toastTimer: undefined,
 };
 
+
 const timeline = createTimelineController(dom, {
   getAnimation: () => state.animation,
   getTime: () => state.time,
@@ -451,7 +452,7 @@ function renderAnimationList(): void {
     const meta = document.createElement('small');
     const derivedMeta = animation.derivedFrom === 'VMD' ? ' · IK + FACE BAKED' : '';
     meta.textContent = animation.source === 'preview'
-      ? 'PREVIEW · 2.40 SEC'
+      ? `PREVIEW · ${animation.duration.toFixed(2)} SEC`
       : `${formatClipMeta(animation)}${derivedMeta}${animation.compatible ? '' : ' · UNMAPPED'}`;
     copy.append(name, meta);
     item.append(type, copy);
