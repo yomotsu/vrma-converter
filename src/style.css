@@ -1502,9 +1502,14 @@ input[type='range']::-moz-range-thumb {
   line-height: 1;
 }
 
-.zoom-button:hover {
+.zoom-button:hover:not(:disabled) {
   color: var(--cyan);
   border-color: rgba(102, 230, 221, 0.3);
+}
+
+.zoom-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 
 .timeline-body {

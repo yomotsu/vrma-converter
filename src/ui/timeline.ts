@@ -10,7 +10,10 @@ import { getTimelineScrollLeftForPlayhead } from '../timelineScroll.ts';
 import type { DomElements } from './dom.js';
 
 const TIMELINE_EDGE_PADDING = 40;
-const DEFAULT_TIMELINE_PIXELS_PER_SECOND = 240;
+const TIMELINE_FRAME_WIDTH = 8;
+const TIMELINE_FRAME_LABEL_INTERVAL = 10;
+const TIMELINE_FRAME_LABEL_CHARACTER_WIDTH = 6;
+const TIMELINE_FRAME_LABEL_GAP = 8;
 
 export type TimelineDom = Pick<
   DomElements,
@@ -29,6 +32,8 @@ export type TimelineDom = Pick<
   | 'currentFrame'
   | 'totalFrames'
   | 'currentTime'
+  | 'zoomIn'
+  | 'zoomOut'
 >;
 
 export type TimelineStateAccessors = {
@@ -64,6 +69,30 @@ function formatTimelineSecond(seconds: number): string {
 
 function formatFrame(frame: number): string {
   return Math.max(0, Math.round(frame)).toString();
+}
+
+function frameLabelFrames(totalFrames: number, frameWidth: number): number[] {
+  const frames: number[] = [];
+  for (let frame = 0; frame <= totalFrames; frame += TIMELINE_FRAME_LABEL_INTERVAL) {
+    frames.push(frame);
+  }
+  if (totalFrames % TIMELINE_FRAME_LABEL_INTERVAL !== 0) {
+    const labelWidth = (formatFrame(totalFrames).length + 2) * TIMELINE_FRAME_LABEL_CHARACTER_WIDTH;
+    const requiredSpacing = labelWidth + TIMELINE_FRAME_LABEL_GAP;
+    while (frames.length > 1 && (totalFrames - frames[frames.length - 1]) * frameWidth < requiredSpacing) {
+      frames.pop();
+    }
+    if ((totalFrames - frames[frames.length - 1]) * frameWidth >= requiredSpacing) {
+      frames.push(totalFrames);
+    }
+  }
+  return frames;
+}
+
+export function getTimelineTrackWidth(totalFrames: number, zoom: number): number {
+  const frameCount = Math.max(1, Math.round(Number.isFinite(totalFrames) ? totalFrames : 1));
+  const safeZoom = Math.max(1, Number.isFinite(zoom) ? zoom : 1);
+  return Math.max(1, frameCount * TIMELINE_FRAME_WIDTH * safeZoom);
 }
 
 function uniqueKeyTimes(set: MotionTrackSet): number[] {
@@ -133,8 +162,6 @@ export function createTimelineController(
   timelineDom: TimelineDom,
   accessors: TimelineStateAccessors,
 ): TimelineController {
-  let timelinePixelsPerSecond: number | null = null;
-
   function renderKeyRow(
     row: HTMLElement,
     times: number[],
@@ -163,6 +190,12 @@ export function createTimelineController(
     timelineDom.transformsToggle.setAttribute('aria-expanded', String(expanded));
     timelineDom.transformsToggle.title = expanded ? 'ボーン別の表示を折りたたむ' : 'ボーン別に展開';
     timelineDom.transformsToggle.setAttribute('aria-label', expanded ? 'Bonesのボーン別表示を折りたたむ' : 'Bonesをボーン別に展開');
+  }
+
+  function updateZoomButtons(): void {
+    const zoom = accessors.getZoom();
+    timelineDom.zoomOut.disabled = zoom <= 1;
+    timelineDom.zoomIn.disabled = zoom >= 3;
   }
 
   function renderTransformBoneRows(
@@ -214,16 +247,6 @@ export function createTimelineController(
     });
   }
 
-  function getTimelinePixelsPerSecond(duration: number): number {
-    if (timelinePixelsPerSecond == null) {
-      const availableWidth = timelineDom.timelineScroll.clientWidth;
-      timelinePixelsPerSecond = availableWidth > 0
-        ? availableWidth / Math.max(0.001, duration)
-        : DEFAULT_TIMELINE_PIXELS_PER_SECOND;
-    }
-    return timelinePixelsPerSecond;
-  }
-
   function updateStickyTimelineRuler(): void {
     const bodyRect = timelineDom.timelineBody.getBoundingClientRect();
     const scrollRect = timelineDom.timelineScroll.getBoundingClientRect();
@@ -263,6 +286,7 @@ export function createTimelineController(
   }
 
   function render(): void {
+    updateZoomButtons();
     updateTransformsExpansionUi();
     const animation = accessors.getAnimation();
     if (animation == null) {
@@ -304,6 +328,7 @@ export function createTimelineController(
     renderKeyRow(timelineDom.faceKeys, faceTimes, duration, 'face', true, provisionalTimesFor(faceSourceTimes, faceOutputTimes));
     const fps = Math.max(1, animation.sourceFps);
     const totalFrames = Math.max(1, Math.round(duration * fps));
+    const zoom = Math.max(1, accessors.getZoom());
     timelineDom.timelineRuler.replaceChildren();
     const frameStep = `${100 / totalFrames}%`;
     const secondStep = `${duration <= 0 ? 100 : (1 / duration) * 100}%`;
@@ -311,7 +336,7 @@ export function createTimelineController(
     timelineDom.timelineRuler.style.setProperty('--second-step', secondStep);
     timelineDom.trackLanes.style.setProperty('--frame-step', frameStep);
     timelineDom.trackLanes.style.setProperty('--second-step', secondStep);
-    const trackWidth = Math.max(1, duration * getTimelinePixelsPerSecond(duration) * accessors.getZoom());
+    const trackWidth = getTimelineTrackWidth(totalFrames, zoom);
     timelineDom.timelineScrollContent.style.width = `${trackWidth + TIMELINE_EDGE_PADDING * 2}px`;
     timelineDom.timelineRuler.style.width = '100%';
     timelineDom.trackLanes.style.width = '100%';
@@ -335,20 +360,13 @@ export function createTimelineController(
     timelineDom.timelineRuler.append(timeRow);
     const frameRow = document.createElement('div');
     frameRow.className = 'ruler-row ruler-frame-row';
-    for (let frame = 0; frame <= totalFrames; frame += 10) {
+    frameLabelFrames(totalFrames, TIMELINE_FRAME_WIDTH * zoom).forEach((frame) => {
       const mark = document.createElement('span');
       mark.className = 'ruler-mark';
       mark.style.left = `${(frame / totalFrames) * 100}%`;
       mark.textContent = `F ${formatFrame(frame)}`;
       frameRow.append(mark);
-    }
-    if (totalFrames % 10 !== 0) {
-      const mark = document.createElement('span');
-      mark.className = 'ruler-mark';
-      mark.style.left = '100%';
-      mark.textContent = `F ${formatFrame(totalFrames)}`;
-      frameRow.append(mark);
-    }
+    });
     timelineDom.timelineRuler.append(frameRow);
     updateStickyTimelineRuler();
     updatePlayhead();

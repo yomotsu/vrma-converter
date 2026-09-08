@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { formatBoneName, getTimeAtPointer, isKeyframeTime, mergeKeyTimes } from '../../src/ui/timeline.ts';
+import {
+  formatBoneName,
+  getTimelineTrackWidth,
+  getTimeAtPointer,
+  isKeyframeTime,
+  mergeKeyTimes,
+} from '../../src/ui/timeline.ts';
 
 test('merges and sorts duplicate key times', () => {
   assert.deepEqual(mergeKeyTimes([0, 0.5], [0.5, 1], [0.25]), [0, 0.25, 0.5, 1]);
@@ -19,4 +25,10 @@ test('converts a pointer position into a clamped timeline time', () => {
 test('recognizes a display time that lands on a keyframe timing', () => {
   assert.equal(isKeyframeTime(1 / 3, [0, 0.333333, 1]), true);
   assert.equal(isKeyframeTime(0.35, [0, 0.333333, 1]), false);
+});
+
+test('uses a fixed frame width at zoom 1 and scales it when zooming in', () => {
+  assert.equal(getTimelineTrackWidth(30, 1), 240);
+  assert.equal(getTimelineTrackWidth(60, 1), 480);
+  assert.equal(getTimelineTrackWidth(30, 2), 480);
 });
