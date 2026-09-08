@@ -1023,13 +1023,6 @@ function bindEvents(): void {
     timeline.render();
   });
   dom.viewport.addEventListener('contextmenu', (event) => event.preventDefault());
-  // OrbitControls normally consumes wheel events for dolly. Keep pinch-to-zoom,
-  // but let wheel events retain their browser default and do nothing to the camera.
-  dom.viewport.addEventListener('wheel', (event) => {
-    // Trackpad pinch gestures are exposed as ctrl+wheel by most browsers.
-    // Preserve those while keeping ordinary wheel scrolling out of dolly/zoom.
-    if (!event.ctrlKey) event.stopImmediatePropagation();
-  }, { capture: true });
   dom.download.addEventListener('click', downloadVrma);
   dom.bakeFps.addEventListener('change', () => {
     const animation = state.animation;

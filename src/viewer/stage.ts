@@ -186,6 +186,7 @@ export function createStage(stageDom: StageDom): StageController {
   camera.position.set(0, 1.28, 3.75);
   const controls = new OrbitControls(camera, stageDom.viewport);
   controls.enablePan = true;
+  controls.enableZoom = true;
   controls.screenSpacePanning = true;
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
