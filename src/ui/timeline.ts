@@ -91,6 +91,11 @@ export function mergeKeyTimes(...lists: number[][]): number[] {
   return Array.from(new Set(lists.flat())).sort((a, b) => a - b);
 }
 
+export function isKeyframeTime(time: number, keyTimes: number[]): boolean {
+  const normalizedTime = Math.round(time * 1000) / 1000;
+  return keyTimes.some((keyTime) => Math.round(keyTime * 1000) / 1000 === normalizedTime);
+}
+
 function laneTimes(set: MotionTrackSet, paths: TrackPath[]): number[] {
   const values = new Set<number>();
   set.forEach((tracks, bone) => {
@@ -249,6 +254,10 @@ export function createTimelineController(
     timelineDom.playhead.style.left = `${percent}%`;
     const frame = Math.round(displayTime * fps);
     timelineDom.currentFrame.textContent = `F ${formatFrame(frame)}`;
+    timelineDom.currentFrame.classList.toggle(
+      'is-keyframe',
+      animation != null && isKeyframeTime(displayTime, allAnimationKeyTimes(animation)),
+    );
     timelineDom.totalFrames.textContent = formatFrame(Math.round(duration * fps));
     timelineDom.currentTime.textContent = formatSeconds(displayTime);
   }

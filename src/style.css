@@ -943,8 +943,12 @@ select:focus-visible {
 }
 
 .transport-readout strong {
-  color: var(--cyan);
+  color: var(--text-soft);
   font-weight: 500;
+}
+
+.transport-readout strong.is-keyframe {
+  color: var(--cyan);
 }
 
 .transport-time {
