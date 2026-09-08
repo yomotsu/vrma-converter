@@ -20,7 +20,7 @@ function toError(error: unknown): Error {
  * A self-contained, read-only MMD preview rendered into the overlay canvas.
  *
  * This player intentionally owns its scene, camera, and MMD animation helper.
- * It does not share the VRM converter's timeline or animation state.
+ * The VRM converter supplies the timeline time so the preview can follow it.
  */
 export class MMDPlayer {
   private readonly canvas: HTMLCanvasElement;
@@ -33,6 +33,9 @@ export class MMDPlayer {
   private mesh: THREE.SkinnedMesh | null = null;
   private helper: MMDAnimationHelper | null = null;
   private loadSequence = 0;
+  private requestedTime = 0;
+  private appliedTime = 0;
+  private animationDuration = 0;
 
   public constructor(canvas: HTMLCanvasElement, options: MMDPlayerOptions) {
     this.canvas = canvas;
@@ -80,9 +83,14 @@ export class MMDPlayer {
     }
   }
 
-  /** Advance and render only the MMD preview. */
-  public update(delta: number): void {
-    if (this.helper != null) this.helper.update(Math.min(Math.max(delta, 0), 0.05));
+  /** Set the MMD animation to the converter timeline's time in seconds. */
+  public setTime(time: number): void {
+    this.requestedTime = Number.isFinite(time) ? Math.max(0, time) : 0;
+    this.applyRequestedTime();
+  }
+
+  /** Render the MMD preview after its pose has been synchronized. */
+  public update(_delta: number): void {
     if (this.mesh != null) this.mesh.updateMatrixWorld(true);
     this.renderer.render(this.scene, this.camera);
   }
@@ -102,12 +110,23 @@ export class MMDPlayer {
   private install(result: MMDLoadResult): void {
     this.removeCurrentMesh();
     this.mesh = result.mesh;
+    this.animationDuration = Math.max(0, result.animation.duration);
+    this.appliedTime = 0;
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
 
     this.helper = new MMDAnimationHelper({ sync: false, pmxAnimation: true });
     this.helper.add(this.mesh, { animation: result.animation, physics: false });
     this.frameMesh(this.mesh);
+    this.applyRequestedTime();
+  }
+
+  private applyRequestedTime(): void {
+    if (this.helper == null) return;
+    const targetTime = Math.min(this.requestedTime, this.animationDuration);
+    const delta = targetTime - this.appliedTime;
+    if (delta !== 0) this.helper.update(delta);
+    this.appliedTime = targetTime;
   }
 
   private frameMesh(mesh: THREE.SkinnedMesh): void {
@@ -148,6 +167,8 @@ export class MMDPlayer {
     this.scene.remove(this.mesh);
     this.disposeMesh(this.mesh);
     this.mesh = null;
+    this.animationDuration = 0;
+    this.appliedTime = 0;
   }
 
   private disposeMesh(mesh: THREE.SkinnedMesh): void {

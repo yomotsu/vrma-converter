@@ -60,7 +60,7 @@ const TIMELINE_AUTO_SCROLL_MAX_SPEED = 14;
 
 const clock = new THREE.Clock();
 const stage = createStage(dom);
-dom.overlayCanvas.hidden = !MMD_PREVIEW_ENABLED;
+dom.overlayCanvas.hidden = true;
 const mmdPlayer = MMD_PREVIEW_ENABLED
   ? new MMDPlayer(dom.overlayCanvas, { modelUrl: defaultMmdModelUrl })
   : null;
@@ -534,6 +534,7 @@ function selectAnimation(id: string): void {
   const next = state.animations.find((animation) => animation.id === id);
   if (next == null) return;
   state.animation = next;
+  updateMmdPreviewVisibility();
   state.bakeFps = initialBakeFpsFor(next);
   state.bakeFrameStep = MIN_BAKE_FRAME_STEP;
   state.speedMultiplier = next.appliedSpeedMultiplier;
@@ -577,6 +578,7 @@ function removeAnimation(id: string): void {
   renderAnimationList();
   timeline.render();
   updateInterface();
+  updateMmdPreviewVisibility();
   showToast(`${removed.clipName} を一覧から削除しました`);
 }
 
@@ -657,6 +659,21 @@ function processCurrentTracks(): void {
   setPlayState(state.isPlaying);
   timeline.render();
   updateInterface();
+  syncMmdPreviewToTimeline();
+}
+
+function syncMmdPreviewToTimeline(): void {
+  const animation = state.animation;
+  updateMmdPreviewVisibility();
+  if (animation?.derivedFrom !== 'VMD') return;
+  const sourceDuration = Math.max(0.001, animation.originalDuration);
+  const timelineDuration = Math.max(0.001, animation.duration);
+  const sourceTime = clamp(state.time * sourceDuration / timelineDuration, 0, sourceDuration);
+  mmdPreview.setTime(sourceTime);
+}
+
+function updateMmdPreviewVisibility(): void {
+  dom.overlayCanvas.hidden = !MMD_PREVIEW_ENABLED || state.animation?.derivedFrom !== 'VMD';
 }
 
 function formatSpeedMultiplier(multiplier: number): string {
@@ -841,6 +858,7 @@ function seekTo(time: number): void {
     if (state.action != null) state.action.paused = !state.isPlaying;
   }
   if (state.model?.vrm != null) state.model.vrm.update(0);
+  syncMmdPreviewToTimeline();
   timeline.updatePlayhead();
 }
 
@@ -1113,6 +1131,7 @@ function animate(): void {
   }
   if (state.model?.vrm != null) state.model.vrm.update(delta);
   stage.render();
+  syncMmdPreviewToTimeline();
   mmdPreview.update(delta);
   if (performance.now() - state.lastUiUpdate > 40) {
     state.lastUiUpdate = performance.now();

@@ -2074,6 +2074,10 @@ input[type='range']::-moz-range-thumb {
   pointer-events: none;
 }
 
+.overlay-canvas[hidden] {
+  display: none;
+}
+
 .small-screen-notice {
   display: none;
 }
