@@ -128,6 +128,7 @@ select:focus-visible {
 .transport-button,
 .play-button,
 .loop-toggle,
+.timeline-auto-scroll-toggle,
 .zoom-button {
   border: 0;
   cursor: pointer;
@@ -1049,28 +1050,38 @@ select:focus-visible {
   margin: 0 5px;
 }
 
-.loop-toggle {
+.loop-toggle,
+.timeline-auto-scroll-toggle {
+  height: 22px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 0;
-  padding: 2px 5px;
+  padding: 2px 6px;
   color: var(--text-dim);
-  background: transparent;
+  border: 1px solid var(--line);
+  background: rgba(13, 29, 44, 0.7);
   font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.09em;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.loop-toggle {
   cursor: pointer;
   transition: 160ms ease;
 }
 
-.loop-toggle.is-on {
-  color: var(--text-main);
-  background: rgba(83, 207, 200, 0.1);
+.loop-toggle.is-on,
+.timeline-auto-scroll-toggle.is-on {
+  color: var(--text);
+  border-color: rgba(102, 230, 221, 0.38);
+  background: rgba(102, 230, 221, 0.11);
 }
 
-.loop-toggle:hover {
-  color: var(--text-main);
+.loop-toggle:hover,
+.timeline-auto-scroll-toggle:hover {
+  color: var(--cyan);
+  border-color: rgba(102, 230, 221, 0.3);
 }
 
 .loop-icon {
@@ -1079,9 +1090,12 @@ select:focus-visible {
 }
 
 .transport-readout {
+  flex: 0 0 auto;
+  margin-left: auto;
   gap: 7px;
   color: var(--text-dim);
   font-size: 10px;
+  white-space: nowrap;
 }
 
 .transport-readout strong {
@@ -1601,7 +1615,7 @@ input[type='range']::-moz-range-thumb {
   height: 48px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 0 25px 0 29px;
   border-bottom: 1px solid var(--line);
 }
@@ -1616,7 +1630,7 @@ input[type='range']::-moz-range-thumb {
   flex: 1 1 auto;
   min-width: 0;
   justify-content: flex-start;
-  gap: 28px;
+  gap: 18px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1625,6 +1639,12 @@ input[type='range']::-moz-range-thumb {
 .timeline-actions {
   flex: 0 0 auto;
   gap: 4px;
+}
+
+.auto-scroll-icon {
+  color: var(--cyan);
+  font-size: 14px;
+  line-height: 1;
 }
 
 .zoom-label {

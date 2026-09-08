@@ -27,6 +27,18 @@ test('keeps the current scroll position while the playhead is visible', () => {
   assert.equal(nextScrollLeft, 300);
 });
 
+test('centers the playhead even while it is visible when auto-centering is enabled', () => {
+  const nextScrollLeft = getTimelineScrollLeftForPlayhead({
+    currentScrollLeft: 300,
+    playheadCenter: 500,
+    viewportLeft: 100,
+    viewportWidth: 600,
+    maxScrollLeft: 2000,
+  }, true);
+
+  assert.equal(nextScrollLeft, 400);
+});
+
 test('clamps the centered playhead position to the scroll range', () => {
   const nextScrollLeft = getTimelineScrollLeftForPlayhead({
     currentScrollLeft: 900,

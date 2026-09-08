@@ -63,6 +63,7 @@ export type DomElements = {
   transformsKeys: HTMLElement;
   faceKeys: HTMLElement;
   playhead: HTMLElement;
+  timelineAutoScrollToggle: HTMLButtonElement;
   zoomIn: HTMLButtonElement;
   zoomOut: HTMLButtonElement;
   toast: HTMLElement;
@@ -134,6 +135,7 @@ export const dom: DomElements = {
   transformsKeys: $<HTMLElement>('#transforms-keys'),
   faceKeys: $<HTMLElement>('#face-keys'),
   playhead: $<HTMLElement>('#playhead'),
+  timelineAutoScrollToggle: $<HTMLButtonElement>('#timeline-auto-scroll-toggle'),
   zoomIn: $<HTMLButtonElement>('#zoom-in-button'),
   zoomOut: $<HTMLButtonElement>('#zoom-out-button'),
   toast: $<HTMLElement>('#toast'),

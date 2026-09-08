@@ -46,7 +46,7 @@ export type TimelineStateAccessors = {
 export type TimelineController = {
   render(): void;
   updatePlayhead(): void;
-  centerOnPlayhead(): void;
+  centerOnPlayhead(alwaysCenter?: boolean): void;
   getTimeAtPointer(clientX: number): number | null;
 };
 
@@ -372,7 +372,7 @@ export function createTimelineController(
     updatePlayhead();
   }
 
-  function centerOnPlayhead(): void {
+  function centerOnPlayhead(alwaysCenter = false): void {
     const playheadRect = timelineDom.playhead.getBoundingClientRect();
     const timelineRect = timelineDom.timelineScroll.getBoundingClientRect();
     const currentScrollLeft = timelineDom.timelineScroll.scrollLeft;
@@ -382,7 +382,7 @@ export function createTimelineController(
       viewportLeft: timelineRect.left,
       viewportWidth: timelineDom.timelineScroll.clientWidth,
       maxScrollLeft: Math.max(0, timelineDom.timelineScroll.scrollWidth - timelineDom.timelineScroll.clientWidth),
-    });
+    }, alwaysCenter);
     if (nextScrollLeft !== currentScrollLeft) timelineDom.timelineScroll.scrollLeft = nextScrollLeft;
   }
 

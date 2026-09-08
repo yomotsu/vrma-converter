@@ -6,9 +6,12 @@ export type TimelineScrollPosition = {
   maxScrollLeft: number;
 };
 
-export function getTimelineScrollLeftForPlayhead(position: TimelineScrollPosition): number {
+export function getTimelineScrollLeftForPlayhead(
+  position: TimelineScrollPosition,
+  alwaysCenter = false,
+): number {
   const viewportRight = position.viewportLeft + position.viewportWidth;
-  if (position.playheadCenter >= position.viewportLeft && position.playheadCenter <= viewportRight) {
+  if (!alwaysCenter && position.playheadCenter >= position.viewportLeft && position.playheadCenter <= viewportRight) {
     return position.currentScrollLeft;
   }
 

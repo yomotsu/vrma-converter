@@ -81,6 +81,7 @@ const state: {
   bakeFrameStep: number;
   zoom: number;
   transformsExpanded: boolean;
+  timelineAutoScrollEnabled: boolean;
   lastUiUpdate: number;
   toastTimer: number | undefined;
 } = {
@@ -97,6 +98,7 @@ const state: {
   bakeFrameStep: MIN_BAKE_FRAME_STEP,
   zoom: 1,
   transformsExpanded: false,
+  timelineAutoScrollEnabled: false,
   lastUiUpdate: 0,
   toastTimer: undefined,
 };
@@ -846,6 +848,18 @@ function setLoopEnabled(enabled: boolean): void {
   dom.loopToggle.title = enabled ? 'ループ再生を無効' : 'ループ再生を有効';
 }
 
+function setTimelineAutoScrollEnabled(enabled: boolean): void {
+  state.timelineAutoScrollEnabled = enabled;
+  dom.timelineAutoScrollToggle.classList.toggle('is-on', enabled);
+  dom.timelineAutoScrollToggle.setAttribute('aria-pressed', String(enabled));
+  dom.timelineAutoScrollToggle.setAttribute('aria-label', enabled ? '再生中の自動スクロールを無効' : '再生中の自動スクロールを有効');
+  dom.timelineAutoScrollToggle.title = enabled ? '再生中の自動スクロールを無効' : '再生中の自動スクロールを有効';
+  if (enabled) {
+    timeline.updatePlayhead();
+    timeline.centerOnPlayhead(true);
+  }
+}
+
 function seekTo(time: number): void {
   if (state.animation == null) return;
   const fps = Math.max(1, state.animation.sourceFps);
@@ -969,6 +983,7 @@ function bindEvents(): void {
     if (!playing) timeline.centerOnPlayhead();
   });
   dom.loopToggle.addEventListener('click', () => setLoopEnabled(!state.loopEnabled));
+  dom.timelineAutoScrollToggle.addEventListener('click', () => setTimelineAutoScrollEnabled(!state.timelineAutoScrollEnabled));
   dom.previousFrame.addEventListener('click', () => seekTo(Math.max(0, state.time - 1 / (state.animation?.sourceFps ?? 30))));
   dom.nextFrame.addEventListener('click', () => seekTo(Math.min(state.animation?.duration ?? 0, state.time + 1 / (state.animation?.sourceFps ?? 30))));
   dom.speedMultiplier.addEventListener('input', () => {
@@ -1136,6 +1151,7 @@ function animate(): void {
   if (performance.now() - state.lastUiUpdate > 40) {
     state.lastUiUpdate = performance.now();
     timeline.updatePlayhead();
+    if (state.isPlaying && state.timelineAutoScrollEnabled) timeline.centerOnPlayhead(true);
   }
 }
 
