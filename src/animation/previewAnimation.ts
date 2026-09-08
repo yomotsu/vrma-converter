@@ -20,7 +20,24 @@ function quaternionValuesFor(
 export function createPreviewAnimation(): AnimationState {
   const duration = 24;
   const fps = 30;
-  const times = Array.from({ length: duration * fps + 1 }, (_, index) => index / fps);
+  const heelLiftObservedStart = 492 / fps;
+  const heelLiftObservedEnd = 516 / fps;
+  const heelRecoveryObservedEnd = 609 / fps;
+  const heelLiftEnd = heelLiftObservedStart
+    + (heelLiftObservedEnd - heelLiftObservedStart) * (2 / 3);
+  const heelRecoveryEnd = heelLiftObservedEnd
+    + (heelRecoveryObservedEnd - heelLiftObservedEnd) / 3;
+  const heelReleaseStart = 17.7;
+  const heelLoweringEnd = heelReleaseStart + (heelRecoveryEnd - heelReleaseStart) * (2 / 3);
+  // Keep only pose changes that matter to the preview. Three.js interpolates
+  // the motion between these points, so filling every source frame would add
+  // data without improving the clip noticeably.
+  const times = [
+    0, 0.5, 1, 1.2, 1.5, 2, 2.5, 3, 3.8, 4.5, 5.4, 6, 6.1, 7, 7.4,
+    9, 9.3, 9.5, 10.5, 11.4, 11.6, 11.8, 12.7, 12.8, 13, 13.05, 13.2,
+    13.25, 13.55, 13.75, 13.8, 15.2, 15.45, 16, heelLiftObservedStart,
+    heelLiftEnd, heelLiftObservedEnd, heelReleaseStart, heelLoweringEnd, 18.2, 19.3, 22, duration,
+  ];
   const loop = (time: number) => Math.sin((time / duration) * Math.PI * 2);
   // A little variation in each breath avoids a metronomic rise and fall.
   const breath = (time: number) => Math.sin(time * Math.PI / 2 + 0.22 * loop(time));
@@ -39,7 +56,7 @@ export function createPreviewAnimation(): AnimationState {
   // Notice the tiring arm, glance diagonally down, then look up before lifting it.
   const glanceDown = (time: number) => gesture(time, 6, 7.4, 9.5, 11.4);
   const glanceRight = (time: number) => gesture(time, 1, 2, 3, 4.5);
-  const heelRise = (time: number) => gesture(time, 16, 17.5, 20.5, 22);
+  const heelRise = (time: number) => gesture(time, 16, heelLiftEnd, heelReleaseStart, heelLoweringEnd);
   const footGlance = (time: number) => gesture(time, 16.4, 17.2, 18.2, 19.3);
   const headPitch = (time: number) => 0.2 * glanceDown(time) + 0.14 * footGlance(time) + 0.016 * breath(time - 0.3);
   const headYaw = (time: number) => 0.28 * glanceDown(time) - 0.25 * glanceRight(time) + 0.18 * footGlance(time);
@@ -85,24 +102,29 @@ export function createPreviewAnimation(): AnimationState {
           - (segment.endsWith('Distal') ? 0.095 : 0.02) * recoverySnap(time, delay)), 'XYZ',
       ));
     });
+    const play = (time: number) => side === 'left' ? heelRise(time) : 0;
     const bend = (time: number) => kneeBend(time) + (side === 'left' ? 0.48 * heelRise(time) : 0);
-    rotation(`${side}UpperLeg`, (time) => new THREE.Euler(-bend(time) / 2, 0, legLean(time), 'ZYX'));
+    rotation(`${side}UpperLeg`, (time) => new THREE.Euler(
+      -bend(time) / 2,
+      -sign * 0.08 * play(time),
+      legLean(time),
+      'ZYX',
+    ));
     rotation(`${side}LowerLeg`, (time) => new THREE.Euler(bend(time), 0, 0, 'XYZ'));
     rotation(`${side}Foot`, (time) => {
       // Lift the heel while the toes point down toward the floor.
-      const play = side === 'left' ? heelRise(time) : 0;
       const neutral = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, legLean(time)))
         .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(bend(time) / 2, 0, 0))).invert();
       neutral.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(
-        0.32 * play, 0, 0, 'XYZ',
+        0.32 * play(time), 0, 0, 'XYZ',
       )));
-      // As the heel rises, turn it slightly toward the supporting foot.
-      neutral.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0.2 * play, 0, 'XYZ')));
+      // Turn the toe toward the supporting foot so the heel drifts outward.
+      neutral.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0.2 * play(time), 0, 'XYZ')));
       return new THREE.Euler().setFromQuaternion(neutral);
     });
     rotation(`${side}Toes`, (time) => new THREE.Euler(
       -0.24 * (side === 'left' ? heelRise(time) : 0),
-      side === 'left' ? -0.06 - 0.14 * heelRise(time) : 0.06,
+      sign * (0.06 - 0.14 * play(time)),
       0,
       'XYZ'));
   }
