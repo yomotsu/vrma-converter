@@ -128,6 +128,62 @@ test('returns a VRMA-ready rotation track for a mapped VMD bone', () => {
   assert.deepEqual(Array.from(motion.rotationTracks.get('leftUpperArm')!.times), [0]);
 });
 
+test('converts A-pose arm geometry into canonical VRMA arm directions', () => {
+  const makeArmBone = (
+    index: number,
+    name: string,
+    parentIndex: number,
+    position: THREE.Vector3,
+    restPosition: THREE.Vector3,
+  ): MMDMotionBoneTrack => ({
+    index,
+    name,
+    parentIndex,
+    rotation: qTrack(`${name}.rotation`, new THREE.Quaternion()),
+    worldRotation: qTrack(`${name}.world`, new THREE.Quaternion()),
+    position: pTrack(`${name}.position`, new THREE.Vector3()),
+    worldPosition: pTrack(`${name}.worldPosition`, position),
+    restWorldRotation: new THREE.Quaternion(),
+    restWorldPosition: restPosition,
+  });
+
+  const result: MMDMotionBakeResult = {
+    duration: 0,
+    fps: 30,
+    times: [0],
+    bones: [
+      makeArmBone(0, '上半身', -1, new THREE.Vector3(0, 10, 0), new THREE.Vector3(0, 10, 0)),
+      makeArmBone(1, '左肩', 0, new THREE.Vector3(0, 9, 0), new THREE.Vector3(0, 9, 0)),
+      makeArmBone(2, '左腕', 1, new THREE.Vector3(1, 8.5, 0), new THREE.Vector3(1, 8.5, 0)),
+      makeArmBone(3, '左腕捩', 2, new THREE.Vector3(1.5, 7.9, 0), new THREE.Vector3(1.5, 7.9, 0)),
+      makeArmBone(4, '左ひじ', 3, new THREE.Vector3(2, 7.3, 0), new THREE.Vector3(2, 7.3, 0)),
+      makeArmBone(5, '左手捩', 4, new THREE.Vector3(2.5, 6.8, 0), new THREE.Vector3(2.5, 6.8, 0)),
+      makeArmBone(6, '左手首', 5, new THREE.Vector3(3, 6.2, 0), new THREE.Vector3(3, 6.2, 0)),
+    ],
+    expressionTracks: [],
+  };
+
+  const motion = retargetMmdMotion(
+    result,
+    new Set(['spine', 'leftShoulder', 'leftUpperArm', 'leftLowerArm']),
+  );
+  const world = (name: string, parent: THREE.Quaternion): THREE.Quaternion => (
+    parent.clone().multiply(new THREE.Quaternion().fromArray(
+      Array.from(motion.rotationTracks.get(name)!.values) as [number, number, number, number],
+    )).normalize()
+  );
+  const spine = new THREE.Quaternion().fromArray(
+    Array.from(motion.rotationTracks.get('spine')!.values) as [number, number, number, number],
+  );
+  const shoulder = world('leftShoulder', spine);
+  const upperArm = world('leftUpperArm', shoulder);
+  const lowerArm = world('leftLowerArm', upperArm);
+  const axis = new THREE.Vector3(1, 0, 0);
+  assert.ok(axis.clone().applyQuaternion(shoulder).distanceTo(new THREE.Vector3(1, -0.5, 0).normalize()) < 1e-5);
+  assert.ok(axis.clone().applyQuaternion(upperArm).distanceTo(new THREE.Vector3(1, -1.2, 0).normalize()) < 1e-5);
+  assert.ok(axis.clone().applyQuaternion(lowerArm).distanceTo(new THREE.Vector3(1, -1.1, 0).normalize()) < 1e-5);
+});
+
 test('converts an MMD sibling upper-body rotation into VRM spine-local rotation', () => {
   const hipsWorld = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 1.4);
   const upperBodyWorld = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 1.7);

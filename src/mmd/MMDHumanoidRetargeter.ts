@@ -198,6 +198,114 @@ function findMappedParentWorldQuaternion(
   return new THREE.Quaternion();
 }
 
+function findMappedChild(
+  bonesByIndex: ReadonlyMap<number, MMDMotionBoneTrack>,
+  source: MMDMotionBoneTrack,
+): MMDMotionBoneTrack | undefined {
+  const queue = [source.index];
+  const visited = new Set<number>();
+
+  while (queue.length > 0) {
+    const parentIndex = queue.shift()!;
+    if (visited.has(parentIndex)) continue;
+    visited.add(parentIndex);
+
+    for (const candidate of bonesByIndex.values()) {
+      if (candidate.parentIndex !== parentIndex) continue;
+      if (mapMmdBoneName(candidate.name) != null) return candidate;
+      queue.push(candidate.index);
+    }
+  }
+
+  return undefined;
+}
+
+function positionAt(
+  track: THREE.VectorKeyframeTrack,
+  sampleIndex: number,
+): THREE.Vector3 | null {
+  const values = valuesAt(track, sampleIndex, 3);
+  if (values.length !== 3 || values.some((value) => !Number.isFinite(value))) return null;
+  return new THREE.Vector3(values[0], values[1], values[2]);
+}
+
+function directionBetween(
+  source: MMDMotionBoneTrack,
+  child: MMDMotionBoneTrack,
+  sampleIndex: number,
+  rest: boolean,
+): THREE.Vector3 | null {
+  const from = rest
+    ? source.restWorldPosition.clone()
+    : positionAt(source.worldPosition, sampleIndex);
+  const to = rest
+    ? child.restWorldPosition.clone()
+    : positionAt(child.worldPosition, sampleIndex);
+  if (from == null || to == null) return null;
+
+  const direction = to.sub(from);
+  if (direction.lengthSq() < 1e-12 || !Number.isFinite(direction.lengthSq())) return null;
+  if (rest) {
+    const restRotation = source.restWorldRotation?.clone() ?? new THREE.Quaternion();
+    if (restRotation.lengthSq() < 1e-12) restRotation.identity();
+    else restRotation.normalize();
+    direction.applyQuaternion(restRotation.invert());
+  }
+  return direction.normalize();
+}
+
+function createArmRotationTracks(
+  side: 'left' | 'right',
+  times: number[],
+  bonesByIndex: ReadonlyMap<number, MMDMotionBoneTrack>,
+  sources: ReadonlyArray<MMDMotionBoneTrack | undefined>,
+  initialParentWorldQuaternions: THREE.Quaternion[],
+): Map<string, THREE.QuaternionKeyframeTrack> {
+  const targetNames = side === 'left'
+    ? ['leftShoulder', 'leftUpperArm', 'leftLowerArm']
+    : ['rightShoulder', 'rightUpperArm', 'rightLowerArm'];
+  const canonicalAxis = side === 'left'
+    ? new THREE.Vector3(1, 0, 0)
+    : new THREE.Vector3(-1, 0, 0);
+  const children = sources.map((source) => source == null ? undefined : findMappedChild(bonesByIndex, source));
+  if (sources.some((source, index) => source == null || children[index] == null)) return new Map();
+  if (sources.some((source, index) => (
+    directionBetween(source!, children[index]!, 0, true) == null
+    || directionBetween(source!, children[index]!, 0, false) == null
+  ))) return new Map();
+
+  const valuesByTarget = targetNames.map(() => [] as number[]);
+  const restDirections = sources.map((source, index) => (
+    directionBetween(source!, children[index]!, 0, true)!
+  ));
+
+  for (let sampleIndex = 0; sampleIndex < times.length; sampleIndex += 1) {
+    let parentWorld = initialParentWorldQuaternions[sampleIndex]?.clone() ?? new THREE.Quaternion();
+    if (parentWorld.lengthSq() < 1e-12) parentWorld.identity();
+    else parentWorld.normalize();
+
+    sources.forEach((source, sourceIndex) => {
+      const basis = new THREE.Quaternion().setFromUnitVectors(canonicalAxis, restDirections[sourceIndex]!);
+      const desiredWorld = motionWorldQuaternionAt(source!, sampleIndex)
+        .multiply(basis)
+        .normalize();
+      const local = parentWorld.clone().invert().multiply(desiredWorld).normalize();
+      valuesByTarget[sourceIndex]!.push(...local.toArray());
+      parentWorld = desiredWorld;
+    });
+  }
+
+  const tracks = new Map<string, THREE.QuaternionKeyframeTrack>();
+  targetNames.forEach((targetName, index) => {
+    tracks.set(targetName, new THREE.QuaternionKeyframeTrack(
+      targetName,
+      [...times],
+      continuousQuaternionValues(valuesByTarget[index]!),
+    ));
+  });
+  return tracks;
+}
+
 function createHipsTranslationTrack(
   times: number[],
   source: MMDMotionBoneTrack,
@@ -250,6 +358,35 @@ export function retargetMmdMotion(
     ? createHipsTranslationTrack(times, translationSource)
     : null;
   const restHipsY = translationSource == null ? 1 : Math.max(0.0001, Math.abs(translationSource.restWorldPosition.y));
+
+  const armSources = (side: 'left' | 'right'): Array<MMDMotionBoneTrack | undefined> => {
+    const targetNames = side === 'left'
+      ? ['leftShoulder', 'leftUpperArm', 'leftLowerArm']
+      : ['rightShoulder', 'rightUpperArm', 'rightLowerArm'];
+    return targetNames.map((targetName) => result.bones.find((bone) => mapMmdBoneName(bone.name) === targetName));
+  };
+  (['left', 'right'] as const).forEach((side) => {
+    const targetNames = side === 'left'
+      ? ['leftShoulder', 'leftUpperArm', 'leftLowerArm']
+      : ['rightShoulder', 'rightUpperArm', 'rightLowerArm'];
+    if (!targetNames.every((name) => canOutputBone(availableHumanoidNames, name))) return;
+    const sources = armSources(side);
+    const shoulder = sources[0];
+    if (shoulder == null) return;
+    const initialParentWorldQuaternions = times.map((_, sampleIndex) => findMappedParentWorldQuaternion(
+      bonesByIndex,
+      shoulder,
+      hipsWorldQuaternions,
+      sampleIndex,
+    ));
+    createArmRotationTracks(
+      side,
+      times,
+      bonesByIndex,
+      sources,
+      initialParentWorldQuaternions,
+    ).forEach((track, targetName) => rotationTracks.set(targetName, track));
+  });
 
   for (const bone of result.bones) {
     if (consumed.has(bone.index)) continue;
