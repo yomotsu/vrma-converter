@@ -98,7 +98,7 @@ const state: {
   bakeFrameStep: MIN_BAKE_FRAME_STEP,
   zoom: 1,
   transformsExpanded: false,
-  timelineAutoScrollEnabled: false,
+  timelineAutoScrollEnabled: true,
   lastUiUpdate: 0,
   toastTimer: undefined,
 };
