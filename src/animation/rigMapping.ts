@@ -155,7 +155,32 @@ const universalVrmRigMap: Record<string, BoneName> = {
   ball_r: 'rightToes',
 };
 
-export type AnimationRigType = 'mixamo' | 'universal';
+const readyPlayerMeVrmRigMap: Record<string, BoneName> = {
+  Hips: 'hips',
+  Spine: 'spine',
+  Spine1: 'chest',
+  Spine2: 'upperChest',
+  Neck: 'neck',
+  Head: 'head',
+  LeftShoulder: 'leftShoulder',
+  LeftArm: 'leftUpperArm',
+  LeftForeArm: 'leftLowerArm',
+  LeftHand: 'leftHand',
+  LeftUpLeg: 'leftUpperLeg',
+  LeftLeg: 'leftLowerLeg',
+  LeftFoot: 'leftFoot',
+  LeftToeBase: 'leftToes',
+  RightShoulder: 'rightShoulder',
+  RightArm: 'rightUpperArm',
+  RightForeArm: 'rightLowerArm',
+  RightHand: 'rightHand',
+  RightUpLeg: 'rightUpperLeg',
+  RightLeg: 'rightLowerLeg',
+  RightFoot: 'rightFoot',
+  RightToeBase: 'rightToes',
+};
+
+export type AnimationRigType = 'mixamo' | 'readyPlayerMe' | 'universal';
 
 export function getSourceTrackBoneName(trackName: string): string {
   const bracket = trackName.match(/bones\[([^\]]+)\]/i);
@@ -167,7 +192,8 @@ export function getSourceTrackBoneName(trackName: string): string {
 function normalizedBoneText(value: string): string {
   return value
     .replace(/mixamorig/gi, '')
-    .replace(/armature|skeleton|rig|joint|bone/gi, '')
+    .replace(/armature|skeleton|joint|bone/gi, '')
+    .replace(/\brig\b/gi, '')
     .replace(/[^a-z0-9]/gi, '')
     .toLowerCase();
 }
@@ -202,12 +228,22 @@ export function mapUniversalBone(name: string): BoneName | null {
     ?? (name.toLowerCase() === 'root' ? null : mapSourceBone(name));
 }
 
+export function mapReadyPlayerMeBone(name: string): BoneName | null {
+  return readyPlayerMeVrmRigMap[name] ?? mapSourceBone(name);
+}
+
 export function detectAnimationRig(asset: THREE.Group): AnimationRigType | null {
   const hasMixamoRig = asset.getObjectByName('mixamorigHips') != null;
+  const hasReadyPlayerMeRig = asset.getObjectByName('Hips') != null
+    && asset.getObjectByName('Spine') != null
+    && asset.getObjectByName('Spine1') != null
+    && asset.getObjectByName('Spine2') != null;
   const hasUniversalRig = asset.getObjectByName('pelvis') != null
     && asset.getObjectByName('spine_01') != null;
-  if (hasMixamoRig === hasUniversalRig) return null;
-  return hasMixamoRig ? 'mixamo' : 'universal';
+  if ([hasMixamoRig, hasReadyPlayerMeRig, hasUniversalRig].filter(Boolean).length !== 1) return null;
+  if (hasMixamoRig) return 'mixamo';
+  if (hasReadyPlayerMeRig) return 'readyPlayerMe';
+  return 'universal';
 }
 
 export function trackPathFor(track: THREE.KeyframeTrack): TrackPath | null {

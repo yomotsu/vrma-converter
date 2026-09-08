@@ -2,13 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 
-import { detectAnimationRig, mapMixamoBone, mapSourceBone } from '../../src/animation/rigMapping.ts';
+import { detectAnimationRig, mapMixamoBone, mapReadyPlayerMeBone, mapSourceBone } from '../../src/animation/rigMapping.ts';
 import { retargetMixamoClip } from '../../src/animation/mixamoParser.ts';
+import { retargetReadyPlayerMeClip } from '../../src/animation/readyPlayerMeParser.ts';
 
 test('maps Mixamo and common aliases to VRM humanoid names', () => {
   assert.equal(mapSourceBone('mixamorigLeftForeArm'), 'leftLowerArm');
   assert.equal(mapMixamoBone('mixamorigRightHandIndex2'), 'rightIndexIntermediate');
   assert.equal(mapSourceBone('pelvis'), 'hips');
+  assert.equal(mapSourceBone('RightHand'), 'rightHand');
+  assert.equal(mapSourceBone('RightArm'), 'rightUpperArm');
+  assert.equal(mapSourceBone('RightUpLeg'), 'rightUpperLeg');
+  assert.equal(mapSourceBone('RightHandIndex1'), 'rightIndexProximal');
+  assert.equal(mapReadyPlayerMeBone('Spine1'), 'chest');
+  assert.equal(mapReadyPlayerMeBone('Spine2'), 'upperChest');
 });
 
 test('detects a Mixamo rig only when its hips marker is present', () => {
@@ -17,6 +24,57 @@ test('detects a Mixamo rig only when its hips marker is present', () => {
   hips.name = 'mixamorigHips';
   asset.add(hips);
   assert.equal(detectAnimationRig(asset), 'mixamo');
+});
+
+test('detects and retargets Ready Player Me animation-library rigs', () => {
+  const asset = new THREE.Group();
+  const armature = new THREE.Bone();
+  armature.name = 'Armature';
+  const hips = new THREE.Bone();
+  hips.name = 'Hips';
+  hips.position.set(0.02, 1, 0.03);
+  const spine = new THREE.Bone();
+  spine.name = 'Spine';
+  const spine1 = new THREE.Bone();
+  spine1.name = 'Spine1';
+  const spine2 = new THREE.Bone();
+  spine2.name = 'Spine2';
+  const arm = new THREE.Bone();
+  arm.name = 'LeftArm';
+  arm.rotation.y = Math.PI / 2;
+  const rightArm = new THREE.Bone();
+  rightArm.name = 'RightArm';
+  rightArm.rotation.y = -Math.PI / 2;
+  armature.add(hips);
+  hips.add(spine);
+  spine.add(spine1);
+  spine1.add(spine2);
+  spine2.add(arm);
+  spine2.add(rightArm);
+  asset.add(armature);
+  asset.updateMatrixWorld(true);
+
+  assert.equal(detectAnimationRig(asset), 'readyPlayerMe');
+  const clip = new THREE.AnimationClip('rpm', 1, [
+    new THREE.VectorKeyframeTrack('Hips.position', [0], [0.03, 1.1, 0.04]),
+    new THREE.QuaternionKeyframeTrack('LeftArm.quaternion', [0], [0, 0, 0, 1]),
+    new THREE.QuaternionKeyframeTrack('RightArm.quaternion', [0], [0, 0, 0, 1]),
+  ]);
+  const result = retargetReadyPlayerMeClip(asset, clip, null);
+  const armRotation = new THREE.Quaternion().fromArray(
+    Array.from(result.tracks.get('leftUpperArm')!.rotation!.values) as [number, number, number, number],
+  );
+  const rightArmRotation = new THREE.Quaternion().fromArray(
+    Array.from(result.tracks.get('rightUpperArm')!.rotation!.values) as [number, number, number, number],
+  );
+
+  assert.equal(result.restHipsY, 1);
+  const hipsPosition = Array.from(result.tracks.get('hips')!.translation!.values);
+  assert.ok(hipsPosition.every((value, index) => Math.abs(value - [0.01, 1.1, 0.01][index]!) < 1e-6));
+  assert.ok(Math.abs(armRotation.x - 0.056588) < 1e-3);
+  assert.ok(Math.abs(armRotation.y - 0.194349) < 1e-3);
+  assert.ok(Math.abs(rightArmRotation.x - 0.056587) < 1e-3);
+  assert.ok(Math.abs(rightArmRotation.y + 0.194349) < 1e-3);
 });
 
 test('retargetMixamoClip removes rest-world rotation and keeps hips translation', () => {

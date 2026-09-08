@@ -12,6 +12,7 @@ import { retargetGenericClip } from './genericParser.ts';
 import { retargetMixamoClip } from './mixamoParser.ts';
 import { detectAnimationRig } from './rigMapping.ts';
 import type { AnimationRigType } from './rigMapping.js';
+import { retargetReadyPlayerMeClip } from './readyPlayerMeParser.ts';
 import { emptyExpressionTrackSet } from './trackUtils.ts';
 import type { LoadedClip } from './types.js';
 import { retargetUniversalClip } from './universalParser.ts';
@@ -73,7 +74,9 @@ export async function parseAnimationFile(
       return source.animations.map((clip, index) => {
         const retargeted = rigType === 'mixamo'
           ? retargetMixamoClip(source, clip, targetVrm)
-          : retargetUniversalClip(source, clip, targetVrm);
+          : rigType === 'readyPlayerMe'
+            ? retargetReadyPlayerMeClip(source, clip, targetVrm)
+            : retargetUniversalClip(source, clip, targetVrm);
         return {
           tracks: retargeted.tracks,
           expressionTracks: emptyExpressionTrackSet(),
@@ -127,7 +130,9 @@ export async function parseAnimationFile(
     return gltf.animations.map((clip, index) => {
       const retargeted = rigType === 'mixamo'
         ? retargetMixamoClip(gltf.scene, clip, targetVrm)
-        : rigType === 'universal'
+        : rigType === 'readyPlayerMe'
+          ? retargetReadyPlayerMeClip(gltf.scene, clip, targetVrm)
+          : rigType === 'universal'
           ? retargetUniversalClip(gltf.scene, clip, targetVrm)
           : null;
       const tracks = retargeted?.tracks ?? retargetGenericClip(clip);
