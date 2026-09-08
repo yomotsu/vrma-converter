@@ -41,13 +41,20 @@
 
           <section class="sidebar-section animation-section">
             <div class="section-label joined-label"><span>02</span><span>モーションソース</span></div>
-            <button class="motion-dropzone" id="animation-drop" type="button">
-              <span class="dropzone-plus">+</span>
-              <strong>アニメーションをドロップ</strong>
-              <small>Mixamo の FBX<br />Universal humanoid rig 対応 FBX<br />BVH / VRMA / VMD など</small>
-              <span class="format-row"><i>VRMA</i><i>GLB</i><i>FBX</i><i>BVH</i><i>VMD</i></span>
-              <span class="dropzone-arrow" aria-hidden="true">↗</span>
-            </button>
+            <div class="animation-drop-target">
+              <button class="motion-dropzone" id="animation-drop" type="button">
+                <span class="dropzone-plus">+</span>
+                <strong>アニメーションをドロップ</strong>
+                <small>Mixamo の FBX<br />Universal humanoid rig 対応 FBX<br />BVH / VRMA / VMD など</small>
+                <span class="format-row"><i>VRMA</i><i>GLB</i><i>FBX</i><i>BVH</i><i>VMD</i></span>
+                <span class="dropzone-arrow" aria-hidden="true">↗</span>
+              </button>
+              <div class="animation-drop-hint" id="animation-drop-hint" role="status" aria-live="polite" hidden>
+                <span class="animation-drop-hint-mark" aria-hidden="true">←</span>
+                <span class="animation-drop-hint-copy"><strong>まずはここから。</strong><span>アニメーションファイルを<br />ここにドロップ</span></span>
+                <button class="animation-drop-hint-close" id="animation-drop-hint-close" type="button" aria-label="案内を閉じる">×</button>
+              </div>
+            </div>
             <input id="animation-file-input" class="visually-hidden" type="file" accept=".vrma,.glb,.gltf,.fbx,.bvh,.vmd,model/gltf-binary,model/gltf+json" />
           </section>
 

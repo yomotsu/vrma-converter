@@ -9,6 +9,8 @@ export type DomElements = {
   modelDrop: HTMLButtonElement;
   modelInput: HTMLInputElement;
   animationDrop: HTMLButtonElement;
+  animationDropHint: HTMLElement;
+  animationDropHintClose: HTMLButtonElement;
   animationInput: HTMLInputElement;
   assetList: HTMLElement;
   modelName: HTMLElement;
@@ -78,6 +80,8 @@ export const dom: DomElements = {
   modelDrop: $<HTMLButtonElement>('#model-drop'),
   modelInput: $<HTMLInputElement>('#vrm-file-input'),
   animationDrop: $<HTMLButtonElement>('#animation-drop'),
+  animationDropHint: $<HTMLElement>('#animation-drop-hint'),
+  animationDropHintClose: $<HTMLButtonElement>('#animation-drop-hint-close'),
   animationInput: $<HTMLInputElement>('#animation-file-input'),
   assetList: $<HTMLElement>('#asset-list'),
   modelName: $<HTMLElement>('#model-name'),

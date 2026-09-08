@@ -52,6 +52,9 @@ const MIN_BAKE_FPS = 1;
 const MAX_BAKE_FPS = 240;
 const DEFAULT_BAKE_FPS = 30;
 const MIN_BAKE_FRAME_STEP = 1;
+const ANIMATION_DROP_HINT_STORAGE_KEY = 'vrma-converter.animation-drop-hint-seen';
+const ANIMATION_DROP_HINT_AUTO_DISMISS_MS = 5000;
+const ANIMATION_DROP_HINT_FADE_OUT_MS = 500;
 const TIMELINE_AUTO_SCROLL_EDGE = 48;
 const TIMELINE_AUTO_SCROLL_MAX_SPEED = 14;
 
@@ -98,6 +101,9 @@ const state: {
   toastTimer: undefined,
 };
 
+let animationDropHintTimer: number | undefined;
+let animationDropHintFadeOutTimer: number | undefined;
+
 
 const timeline = createTimelineController(dom, {
   getAnimation: () => state.animation,
@@ -111,6 +117,42 @@ function showToast(message: string): void {
   dom.toast.classList.add('visible');
   if (state.toastTimer !== undefined) window.clearTimeout(state.toastTimer);
   state.toastTimer = window.setTimeout(() => dom.toast.classList.remove('visible'), 2800);
+}
+
+function hasSeenAnimationDropHint(): boolean {
+  try {
+    return window.localStorage.getItem(ANIMATION_DROP_HINT_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function dismissAnimationDropHint(): void {
+  if (animationDropHintTimer !== undefined) {
+    window.clearTimeout(animationDropHintTimer);
+    animationDropHintTimer = undefined;
+  }
+  dom.animationDrop.classList.remove('first-visit-focus');
+  if (!dom.animationDropHint.hidden && !dom.animationDropHint.classList.contains('is-dismissing')) {
+    dom.animationDropHint.classList.add('is-dismissing');
+    animationDropHintFadeOutTimer = window.setTimeout(() => {
+      dom.animationDropHint.hidden = true;
+      dom.animationDropHint.classList.remove('is-dismissing');
+      animationDropHintFadeOutTimer = undefined;
+    }, ANIMATION_DROP_HINT_FADE_OUT_MS);
+  }
+  try {
+    window.localStorage.setItem(ANIMATION_DROP_HINT_STORAGE_KEY, 'true');
+  } catch {
+    // The hint can still be dismissed when storage is unavailable.
+  }
+}
+
+function showAnimationDropHintIfNeeded(): void {
+  if (hasSeenAnimationDropHint()) return;
+  dom.animationDropHint.hidden = false;
+  dom.animationDrop.classList.add('first-visit-focus');
+  animationDropHintTimer = window.setTimeout(dismissAnimationDropHint, ANIMATION_DROP_HINT_AUTO_DISMISS_MS);
 }
 
 function setLoading(visible: boolean, label = 'LOADING ASSET'): void {
@@ -860,7 +902,11 @@ function installPreview(): void {
 function bindEvents(): void {
   stage.setViewportBackground('dark');
   dom.modelDrop.addEventListener('click', () => dom.modelInput.click());
-  dom.animationDrop.addEventListener('click', () => dom.animationInput.click());
+  dom.animationDrop.addEventListener('click', () => {
+    dismissAnimationDropHint();
+    dom.animationInput.click();
+  });
+  dom.animationDropHintClose.addEventListener('click', dismissAnimationDropHint);
   dom.modelInput.addEventListener('change', () => handleFileInput(dom.modelInput, (file) => {
     if (extensionOf(file.name) !== 'vrm') {
       showToast('VRM ファイルを選択してください');
@@ -878,7 +924,10 @@ function bindEvents(): void {
     const url = URL.createObjectURL(file);
     void loadVrmUrl(url, file.name, 'local', url).catch(() => undefined);
   });
-  bindDropTarget(dom.animationDrop, (file) => { void handleAnimationFile(file); });
+  bindDropTarget(dom.animationDrop, (file) => {
+    dismissAnimationDropHint();
+    void handleAnimationFile(file);
+  });
 
   document.addEventListener('dragover', (event) => event.preventDefault());
   document.addEventListener('drop', (event) => {
@@ -891,6 +940,7 @@ function bindEvents(): void {
       const url = URL.createObjectURL(file);
       void loadVrmUrl(url, file.name, 'local', url).catch(() => undefined);
     } else {
+      dismissAnimationDropHint();
       void handleAnimationFile(file);
     }
   });
@@ -963,6 +1013,7 @@ function bindEvents(): void {
   dom.bakeRevert.addEventListener('click', revertBake);
   dom.zoomIn.addEventListener('click', () => { state.zoom = clamp(state.zoom + 0.25, 1, 3); timeline.render(); });
   dom.zoomOut.addEventListener('click', () => { state.zoom = clamp(state.zoom - 0.25, 1, 3); timeline.render(); });
+  showAnimationDropHintIfNeeded();
 
   let seeking = false;
   let seekingPointerX = 0;

@@ -463,8 +463,13 @@ select:focus-visible {
   margin-top: 4px;
 }
 
+.animation-drop-target {
+  position: relative;
+}
+
 .motion-dropzone {
   min-height: 148px;
+  anchor-name: --animation-drop-target;
   position: relative;
   overflow: hidden;
   display: flex;
@@ -473,6 +478,143 @@ select:focus-visible {
   justify-content: center;
   padding: 19px 12px 13px;
   text-align: center;
+}
+
+.motion-dropzone.first-visit-focus {
+  border-color: rgba(102, 230, 221, 0.8);
+  box-shadow: 0 0 0 3px rgba(102, 230, 221, 0.08), 0 0 28px rgba(102, 230, 221, 0.16);
+}
+
+.animation-drop-hint {
+  position: fixed;
+  position-anchor: --animation-drop-target;
+  z-index: 9;
+  top: anchor(top);
+  left: anchor(right);
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 7px;
+  min-height: 62px;
+  width: min(220px, calc(100vw - 24px));
+  margin: 12px 0 0 12px;
+  padding: 10px 7px 10px 10px;
+  border: 1px solid rgba(255, 224, 246, 0.92);
+  border-radius: 3px;
+  background: linear-gradient(135deg, var(--pink), #f4b5e3);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4), 0 0 24px rgba(229, 155, 212, 0.32);
+  pointer-events: auto;
+  animation:
+    animation-drop-hint-enter 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s both,
+    animation-drop-hint-pulse 2200ms ease-in-out 1.5s infinite;
+}
+
+.animation-drop-hint[hidden] {
+  display: none;
+}
+
+.animation-drop-hint.is-dismissing {
+  animation: animation-drop-hint-exit 0.5s ease-out both;
+}
+
+.animation-drop-hint::after {
+  width: 12px;
+  height: 18px;
+  position: absolute;
+  top: 22px;
+  left: -11px;
+  background: linear-gradient(135deg, var(--pink), #f4b5e3);
+  clip-path: polygon(100% 0, 100% 100%, 0 50%);
+  content: '';
+}
+
+.animation-drop-hint-mark {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: #542843;
+  border: 1px solid rgba(84, 40, 67, 0.45);
+  border-radius: 50%;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.animation-drop-hint-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.animation-drop-hint-copy strong,
+.animation-drop-hint-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animation-drop-hint-copy strong {
+  color: #713452;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.animation-drop-hint-copy span {
+  color: #321d2a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.animation-drop-hint-close {
+  width: 18px;
+  height: 18px;
+  z-index: 1;
+  padding: 0;
+  color: #654456;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  pointer-events: auto;
+}
+
+.animation-drop-hint-close:hover,
+.animation-drop-hint-close:focus-visible {
+  color: #321d2a;
+  border-color: rgba(84, 40, 67, 0.42);
+}
+
+@keyframes animation-drop-hint-pulse {
+  0%,
+  100% { box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4), 0 0 24px rgba(229, 155, 212, 0.32); }
+  50% { box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4), 0 0 32px rgba(229, 155, 212, 0.58); }
+}
+
+@keyframes animation-drop-hint-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes animation-drop-hint-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animation-drop-hint {
+    animation: none;
+  }
 }
 
 .motion-dropzone strong {
