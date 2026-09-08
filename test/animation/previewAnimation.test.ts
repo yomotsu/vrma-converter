@@ -37,23 +37,12 @@ test('keeps preview motion tracks sparse instead of filling every source frame',
   }
 });
 
-test('turns the lifted leg into an inward-foot pose', () => {
-  const { tracks } = createPreviewAnimation();
-  const knee = tracks.get('leftUpperLeg')!.rotation!;
-  const toes = tracks.get('leftToes')!.rotation!;
-  const kneeYawAt = (time: number) => new THREE.Euler().setFromQuaternion(quaternionAt(knee, time), 'YXZ').y;
-  const toeYawAt = (time: number) => new THREE.Euler().setFromQuaternion(quaternionAt(toes, time), 'YXZ').y;
-
-  assert.ok(kneeYawAt(17.5) > kneeYawAt(1) + 0.04);
-  assert.ok(toeYawAt(17.5) > toeYawAt(1) + 0.1);
-});
-
-test('uses a toe planted heel raise instead of circling the ankle', () => {
+test('keeps both feet planted while adding subtle idle adjustments', () => {
   const animation = createPreviewAnimation();
   const { tracks } = animation;
   const hips = tracks.get('hips')!.translation!;
   const groundTolerance = 0.001;
-  let maxLeftLift = 0;
+  let maxAnkleDistance = 0;
   for (let frame = 0; frame <= animation.duration * 30; frame += 1) {
     const time = frame / 30;
     for (const side of ['left', 'right'] as const) {
@@ -62,33 +51,50 @@ test('uses a toe planted heel raise instead of circling the ankle', () => {
       const ankle = new THREE.Vector3().fromArray(valuesAt(hips, time))
         .add(new THREE.Vector3(0, -0.45, 0).applyQuaternion(upper))
         .add(new THREE.Vector3(0, -0.45, 0).applyQuaternion(upper.clone().multiply(lower)));
-      if (side === 'right' || time <= 16 || time >= 22) {
-        assert.ok(ankle.distanceTo(new THREE.Vector3(0, 0.1, 0)) < groundTolerance);
-      } else {
-        maxLeftLift = Math.max(maxLeftLift, ankle.y - 0.1);
-        assert.ok(ankle.y >= 0.1 - groundTolerance);
-      }
+      maxAnkleDistance = Math.max(maxAnkleDistance, ankle.distanceTo(new THREE.Vector3(0, 0.1, 0)));
     }
   }
-  assert.ok(maxLeftLift > 0.03);
-  assert.ok(Math.max(...hips.values.filter((_, index) => index % 3 === 1))
-    - Math.min(...hips.values.filter((_, index) => index % 3 === 1)) > 0.003);
-  const leftKnee = new THREE.Euler().setFromQuaternion(quaternionAt(tracks.get('leftLowerLeg')!.rotation!, 17.5)).x;
-  const leftFoot = new THREE.Euler().setFromQuaternion(quaternionAt(tracks.get('leftFoot')!.rotation!, 17.5)).x;
-  const restingFoot = new THREE.Euler().setFromQuaternion(quaternionAt(tracks.get('leftFoot')!.rotation!, 1)).x;
-  const leftToes = new THREE.Euler().setFromQuaternion(quaternionAt(tracks.get('leftToes')!.rotation!, 17.5)).x;
-  assert.ok(leftKnee > 0.2);
-  assert.ok(leftFoot - restingFoot > 0.04);
-  assert.ok(leftToes < -0.1);
-  const restingYaw = new THREE.Euler().setFromQuaternion(quaternionAt(tracks.get('leftFoot')!.rotation!, 1)).y;
-  const raisedYaw = new THREE.Euler().setFromQuaternion(quaternionAt(tracks.get('leftFoot')!.rotation!, 17.5)).y;
-  assert.ok(raisedYaw > restingYaw + 0.15);
+  assert.ok(maxAnkleDistance < groundTolerance);
+
+  const kneeAt = (side: 'left' | 'right', time: number) => new THREE.Euler()
+    .setFromQuaternion(quaternionAt(tracks.get(`${side}LowerLeg`)!.rotation!, time)).x;
+  let maxKneeDifference = 0;
+  for (let frame = 0; frame <= animation.duration * 30; frame += 1) {
+    const time = frame / 30;
+    maxKneeDifference = Math.max(maxKneeDifference, Math.abs(kneeAt('left', time) - kneeAt('right', time)));
+  }
+  assert.ok(maxKneeDifference < 1e-6);
+  assert.ok(Math.max(...Array.from({ length: animation.duration * 30 + 1 }, (_, frame) => kneeAt('left', frame / 30))) < 0.3);
+
+  const toeFlexAt = (side: 'left' | 'right', time: number) => new THREE.Euler()
+    .setFromQuaternion(quaternionAt(tracks.get(`${side}Toes`)!.rotation!, time)).x;
+  const toeSamples = Array.from({ length: animation.duration * 30 + 1 }, (_, frame) => frame / 30);
+  for (const side of ['left', 'right'] as const) {
+    const samples = toeSamples.map((time) => toeFlexAt(side, time));
+    assert.ok(Math.max(...samples) - Math.min(...samples) > 0.025);
+  }
+  assert.ok(Math.max(...toeSamples.map((time) => Math.abs(toeFlexAt('left', time) - toeFlexAt('right', time)))) > 0.002);
+
   const leftToeRestYaw = new THREE.Euler().setFromQuaternion(quaternionAt(tracks.get('leftToes')!.rotation!, 1)).y;
-  const leftToeRaisedYaw = new THREE.Euler().setFromQuaternion(quaternionAt(tracks.get('leftToes')!.rotation!, 17.5)).y;
   const rightToeRestYaw = new THREE.Euler().setFromQuaternion(quaternionAt(tracks.get('rightToes')!.rotation!, 1)).y;
   assert.ok(leftToeRestYaw < -0.03);
   assert.ok(rightToeRestYaw > 0.03);
-  assert.ok(leftToeRaisedYaw > leftToeRestYaw + 0.1);
+});
+
+test('adds small opposite lateral weight shifts early and later', () => {
+  const hips = createPreviewAnimation().tracks.get('hips')!.translation!;
+  const xAt = (time: number) => valuesAt(hips, time)[0]!;
+  const earlyBefore = xAt(1.2);
+  const earlyPeak = xAt(2.5);
+  const earlyAfter = xAt(4.5);
+  const lateBefore = xAt(16.4);
+  const latePeak = xAt(17.2);
+  const lateAfter = xAt(19.3);
+
+  assert.ok(earlyPeak < earlyBefore - 0.004);
+  assert.ok(earlyPeak < earlyAfter - 0.004);
+  assert.ok(latePeak > lateBefore + 0.004);
+  assert.ok(latePeak > lateAfter + 0.012);
 });
 
 test('arches the wrists and fingers while trying, then lets them droop with fatigue', () => {
@@ -132,48 +138,17 @@ test('makes breathing visible in the chest and knees', () => {
   assert.ok(Math.max(...Array.from(shoulder.values, (_, index) => index % 4 === 1 ? Math.abs(shoulder.values[index]) : 0)) > 0.008);
 });
 
-test('lowers the arms slowly and raises the heel quickly', () => {
+test('lowers the arms slowly while keeping the rest of the stance calm', () => {
   const { tracks } = createPreviewAnimation();
   const arm = tracks.get('leftUpperArm')!.rotation!;
   const signedArm = (seconds: number) => -new THREE.Euler().setFromQuaternion(quaternionAt(arm, seconds)).z;
   assert.ok(signedArm(6) < 0.12);
   assert.ok(signedArm(9) > 0.15);
-  const knee = tracks.get('leftLowerLeg')!.rotation!;
-  const at = (seconds: number) => new THREE.Euler().setFromQuaternion(quaternionAt(knee, seconds)).x;
-  assert.ok(at(16.5) < at(16.95) - 0.07);
-  assert.ok(at(16.5) > 0.2);
-  assert.ok(at(16.95) > 0.45);
-  assert.ok(at(16.7) < at(16.95) - 0.05);
   const spine = tracks.get('spine')!.rotation!;
   const spineZ = (seconds: number) => new THREE.Euler().setFromQuaternion(quaternionAt(spine, seconds)).z;
   assert.ok(Math.abs(spineZ(18) - spineZ(16)) < 0.03);
   const hips = tracks.get('hips')!.translation!;
   assert.ok(Math.abs(valuesAt(hips, 18)[0]! - valuesAt(hips, 16)[0]!) < 0.035);
-});
-
-test('lowers the raised heel substantially after the release starts', () => {
-  const { tracks } = createPreviewAnimation();
-  const knee = tracks.get('leftLowerLeg')!.rotation!;
-  const at = (seconds: number) => new THREE.Euler().setFromQuaternion(quaternionAt(knee, seconds)).x;
-
-  assert.ok(at(18.1) < at(17.7) - 0.4);
-});
-
-test('compresses the heel lift and recovery sections', () => {
-  const { tracks } = createPreviewAnimation();
-  const knee = tracks.get('leftLowerLeg')!.rotation!;
-  const at = (seconds: number) => new THREE.Euler().setFromQuaternion(quaternionAt(knee, seconds)).x;
-
-  assert.ok(at(16.95) > at(17.2) - 0.03);
-  assert.ok(at(18.2) < at(17.2) - 0.2);
-});
-
-test('shortens the heel lowering duration to two thirds', () => {
-  const { tracks } = createPreviewAnimation();
-  const knee = tracks.get('leftLowerLeg')!.rotation!;
-  const at = (seconds: number) => new THREE.Euler().setFromQuaternion(quaternionAt(knee, seconds)).x;
-
-  assert.ok(at(18.1) < 0.2);
 });
 
 test('adds a brief wrist and distal finger recoil at arm recovery', () => {
